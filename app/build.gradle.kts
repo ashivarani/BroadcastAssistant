@@ -88,8 +88,8 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     //noinspection UseTomlInstead
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.core:core:1.17.0")
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation(libs.androidx.core)
+    implementation(libs.androidx.core.ktx)
 }
 val vNameProvider = provider { android.defaultConfig.versionName ?: "0.0.0" }
 tasks.register<Copy>("exportDebugApk") {
