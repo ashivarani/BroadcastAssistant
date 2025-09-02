@@ -1,5 +1,7 @@
 package com.android.broadcastassistant.ui.navigation
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -12,6 +14,7 @@ import com.android.broadcastassistant.ui.AuracastScreen
 import com.android.broadcastassistant.ui.screens.LanguageSelectionScreen
 import com.android.broadcastassistant.viewmodel.AuracastViewModel
 
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
 fun AppNavHost(viewModel: AuracastViewModel = viewModel()) {
     val navController = rememberNavController()

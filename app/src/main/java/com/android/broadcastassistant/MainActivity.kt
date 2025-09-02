@@ -1,15 +1,17 @@
 package com.android.broadcastassistant
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.annotation.RequiresApi
 import com.android.broadcastassistant.ui.navigation.AppNavHost
 import com.android.broadcastassistant.ui.theme.BroadcastAssistantTheme
 import com.android.broadcastassistant.util.PermissionHelper
 import com.android.broadcastassistant.viewmodel.AuracastViewModel
-
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 class MainActivity : ComponentActivity() {
 
     private val viewModel: AuracastViewModel by viewModels()
