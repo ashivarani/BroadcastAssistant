@@ -1,5 +1,7 @@
 package com.android.broadcastassistant.ui
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import com.android.broadcastassistant.data.AuracastDevice
 import com.android.broadcastassistant.viewmodel.AuracastViewModel
 
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuracastScreen(viewModel: AuracastViewModel) {

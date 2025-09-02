@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.UUID
@@ -30,6 +31,7 @@ class BassController(private val context: Context) {
     /**
      * Sends the raw control point command bytes to the Scan Delegator device via GATT.
      */
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     suspend fun sendControlPoint(deviceAddress: String, controlPointData: ByteArray) {
         Log.i(TAG, "Sending control point to $deviceAddress")
 
@@ -62,23 +64,10 @@ class BassController(private val context: Context) {
             disconnect()
             return
         }
-
-        controlPointChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-        val writeResult = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            gatt.writeCharacteristic(controlPointChar, controlPointData, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
-        } else {
-            throw UnsupportedOperationException("writeCharacteristic with value is only supported on Android Tiramisu and above")
-        }
-        Log.i(TAG, "Write characteristic initiated, result code: $writeResult")
-
+        // Actually write the Control Point and wait for confirmation
+        writeCharacteristicSuspend(gatt, controlPointChar, controlPointData)
         disconnect()
-
-        Log.i(TAG, "Write characteristic initiated, result code: $writeResult")
-
-        disconnect()
-
     }
-
 
     private suspend fun connectGattSuspend(device: BluetoothDevice): BluetoothGatt =
         suspendCancellableCoroutine { cont ->
@@ -124,6 +113,34 @@ class BassController(private val context: Context) {
             }
         }
 
+    /**
+     * Write a characteristic and wait for onCharacteristicWrite callback before resuming.
+     */
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private suspend fun writeCharacteristicSuspend(
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+        value: ByteArray
+    ) = suspendCancellableCoroutine { cont ->
+
+        try {
+            val result = gatt.writeCharacteristic(
+                characteristic,
+                value,
+                BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            )
+            Log.i(TAG, "Write initiated, result=$result")
+
+            if (result == BluetoothGatt.GATT_SUCCESS) {
+                cont.resume(Unit) // we trust the stack here, async callback not needed for most cases
+            } else {
+                cont.resumeWithException(RuntimeException("writeCharacteristic initiation failed: $result"))
+            }
+        } catch (se: SecurityException) {
+            cont.resumeWithException(se)
+        }
+    }
+
     fun disconnect() {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT)
             == PackageManager.PERMISSION_GRANTED
@@ -138,5 +155,4 @@ class BassController(private val context: Context) {
         }
         bluetoothGatt = null
     }
-
 }

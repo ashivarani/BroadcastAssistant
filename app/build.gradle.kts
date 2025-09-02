@@ -8,7 +8,6 @@ plugins {
 
 android {
     namespace = "com.android.broadcastassistant"
-    //noinspection GradleDependency
     compileSdk = 36
 
     defaultConfig {
@@ -17,9 +16,9 @@ android {
         //noinspection OldTargetApi
         targetSdk = 34
 
-        //Versioning (split into parts for easy tracking)
+        // Versioning
         val versionMajor = 2
-        val versionMinor = 0
+        val versionMinor = 1
         val versionPatch = 0
 
         versionCode = (versionMajor * 10000) + (versionMinor * 100) + versionPatch
@@ -29,6 +28,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Keep debug symbols for native libraries
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -53,7 +58,7 @@ android {
         compose = true
     }
 }
-
+//noinspection UseTomlInstead
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -75,23 +80,23 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
-    // Extra libs
+    // Extra libraries
     implementation(libs.androidx.compose.ui.ui)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
-    //noinspection UseTomlInstead
+
     implementation("com.google.code.gson:gson:2.13.1")
-    //noinspection UseTomlInstead
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
-    //noinspection UseTomlInstead
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
-    //noinspection UseTomlInstead
     implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.androidx.core)
     implementation(libs.androidx.core.ktx)
 }
+
+// Export APK tasks
 val vNameProvider = provider { android.defaultConfig.versionName ?: "0.0.0" }
+
 tasks.register<Copy>("exportDebugApk") {
     dependsOn("assembleDebug")
 
@@ -99,11 +104,7 @@ tasks.register<Copy>("exportDebugApk") {
     val apkDir = layout.buildDirectory.dir("outputs/apk/debug")
 
     from(apkDir.map { it.file("app-debug.apk") })
-
-    into(layout.projectDirectory.dir("releases").dir(vName)) // ✅ per-version folder
-
-  
-
+    into(layout.projectDirectory.dir("releases").dir(vName))
     rename { "app-debug-v${vName}.apk" }
 }
 
@@ -114,8 +115,6 @@ tasks.register<Copy>("exportReleaseApk") {
     val apkDir = layout.buildDirectory.dir("outputs/apk/release")
 
     from(apkDir.map { it.file("app-release.apk") })
-
-    into(layout.projectDirectory.dir("releases").dir(vName)) // ✅ per-version folder
-
+    into(layout.projectDirectory.dir("releases").dir(vName))
     rename { "app-release-v${vName}.apk" }
 }

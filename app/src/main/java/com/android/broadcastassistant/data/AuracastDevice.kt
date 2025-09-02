@@ -10,6 +10,7 @@ package com.android.broadcastassistant.data
  * @param selectedBisIndex Index of the currently selected BIS channel (-1 if none).
  * @param broadcastId Optional 24-bit broadcast identifier.
  * @param broadcastCode Optional raw bytes for encrypted broadcasts.
+ * @param sourceId ID assigned by the Broadcast Receive State characteristic (needed for BASS control).
  */
 data class AuracastDevice(
     val name: String,
@@ -19,6 +20,7 @@ data class AuracastDevice(
     val selectedBisIndex: Int = -1,
     val broadcastId: Int? = null,
     val broadcastCode: ByteArray? = null,
+    val sourceId: Int? = null, // 🔹 added for proper BASS commands
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -29,6 +31,7 @@ data class AuracastDevice(
         if (rssi != other.rssi) return false
         if (selectedBisIndex != other.selectedBisIndex) return false
         if (broadcastId != other.broadcastId) return false
+        if (sourceId != other.sourceId) return false
         if (name != other.name) return false
         if (address != other.address) return false
         if (bisChannels != other.bisChannels) return false
@@ -41,6 +44,7 @@ data class AuracastDevice(
         var result = rssi
         result = 31 * result + selectedBisIndex
         result = 31 * result + (broadcastId ?: 0)
+        result = 31 * result + (sourceId ?: 0)
         result = 31 * result + name.hashCode()
         result = 31 * result + address.hashCode()
         result = 31 * result + bisChannels.hashCode()

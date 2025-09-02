@@ -1,7 +1,9 @@
 package com.android.broadcastassistant.viewmodel
 
 import android.app.Application
+import android.graphics.Color
 import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.android.broadcastassistant.audio.AuracastEaScanner
@@ -15,13 +17,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 open class AuracastViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _devices = MutableStateFlow<List<AuracastDevice>>(emptyList())
     val devices: StateFlow<List<AuracastDevice>> = _devices
 
-    private val _statusColor = MutableStateFlow(android.graphics.Color.BLACK)
+    private val _statusColor = MutableStateFlow(Color.BLACK)
 
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning
@@ -39,6 +41,7 @@ open class AuracastViewModel(application: Application) : AndroidViewModel(applic
         getCurrentDevices = { _devices.value },
         bassController = bassController
     )
+
     private val periodicScanner = AuracastEaScanner(getApplication<Application>().applicationContext)
 
     // Fake data generator (for emulator only)
@@ -104,7 +107,7 @@ open class AuracastViewModel(application: Application) : AndroidViewModel(applic
             _isScanning.value = false
             val count = _devices.value.size
             _statusMessage.value = "Fake scan stopped — $count devices shown"
-            _statusColor.value = android.graphics.Color.BLACK
+            _statusColor.value = Color.BLACK
             logi(TAG, "Stopped fake scan on emulator")
             return
         }
@@ -113,7 +116,7 @@ open class AuracastViewModel(application: Application) : AndroidViewModel(applic
         _isScanning.value = false
         val count = _devices.value.size
         _statusMessage.value = "Scan stopped — $count devices found"
-        _statusColor.value = android.graphics.Color.BLACK
+        _statusColor.value = Color.BLACK
         logi(TAG, "Stopped periodic advertising scan")
     }
 
@@ -121,8 +124,19 @@ open class AuracastViewModel(application: Application) : AndroidViewModel(applic
         if (_isScanning.value) stopScan() else startScan()
     }
 
+    /**
+     * Select BIS from the chosen broadcaster.
+     * Since phone is receiver, directly route to BisSelectionManager.
+     */
     fun selectBisChannel(device: AuracastDevice, bisIndex: Int) {
-        bisSelectionManager.selectBisChannel(device, bisIndex)
+        viewModelScope.launch {
+            try {
+                logi(TAG, "Phone is receiver → selecting BIS $bisIndex")
+                bisSelectionManager.selectBisChannel(device, bisIndex)
+            } catch (e: Exception) {
+                logw(TAG, "Failed to select BIS: ${e.message}")
+            }
+        }
     }
 
     private fun isRunningOnEmulator(): Boolean {
