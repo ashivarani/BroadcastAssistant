@@ -13,7 +13,8 @@ captures/
 .externalNativeBuild/
 .cxx/
 *.aab
-*.apk
+# Add this line ABOVE *.apk
+!releases/*.apk
 output-metadata.json
 
 # IntelliJ
