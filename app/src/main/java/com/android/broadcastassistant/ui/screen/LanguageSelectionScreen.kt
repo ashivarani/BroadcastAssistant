@@ -1,7 +1,11 @@
 package com.android.broadcastassistant.ui.screen
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -15,18 +19,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.android.broadcastassistant.audio.FakeAuracastBroadcasterSource
 import com.android.broadcastassistant.data.AuracastDevice
+import com.android.broadcastassistant.ui.theme.AppTextPrimary
+import com.android.broadcastassistant.ui.theme.ButtonTextWhite
+import com.android.broadcastassistant.ui.theme.RoyalBlue
 import com.android.broadcastassistant.util.logd
 import com.android.broadcastassistant.util.logi
 import com.android.broadcastassistant.util.loge
 
 /**
- * Screen for selecting a Broadcast Isochronous Stream (BIS) channel
- * from a given [AuracastDevice].
+ * Screen to display all available BIS channels for a selected Auracast device.
  *
- * Responsibilities:
- * - Show the list of BIS channels available for the selected device.
- * - Allow the user to pick a BIS, propagating selection upward.
- * - Provide navigation back to the previous screen.
+ * User can select a BIS channel for audio routing or go back to the previous screen.
+ *
+ * @param device The AuracastDevice whose BIS channels are displayed
+ * @param onBisSelected Callback when a BIS channel is selected (returns BIS index)
+ * @param onBack Callback triggered when the user presses the back button
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,29 +42,32 @@ fun LanguageSelectionScreen(
     onBisSelected: (Int) -> Unit,
     onBack: () -> Unit
 ) {
-    logd("LanguageSelectionScreen: Entry → rendering for ${device.address}")
-
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Available BIS Channels") },
+                title = { Text("Available BIS Channels", color = ButtonTextWhite) },
                 navigationIcon = {
                     IconButton(
                         onClick = {
                             try {
-                                logd("LanguageSelectionScreen: Back clicked for ${device.address}")
+                                logd("LanguageSelectionScreen: Back button clicked")
                                 onBack()
-                                logi("LanguageSelectionScreen: Back navigation executed")
                             } catch (e: Exception) {
-                                loge("LanguageSelectionScreen: Failed handling back click", e)
+                                loge("LanguageSelectionScreen: Error in onBack callback", e)
                             }
                         }
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = ButtonTextWhite)
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = RoyalBlue,
+                    titleContentColor = ButtonTextWhite,
+                    navigationIconContentColor = ButtonTextWhite
+                )
             )
-        }
+        },
+        containerColor = Color.White
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -65,19 +75,23 @@ fun LanguageSelectionScreen(
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
-            // Show device name
+            // Display device name
             Text(
                 text = "Device: ${device.name.ifEmpty { "Unknown Device" }}",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
+                color = AppTextPrimary,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
 
             if (device.bisChannels.isEmpty()) {
-                logd("LanguageSelectionScreen: No BIS channels for ${device.address}")
-                Text("No BIS channels available for this device.")
+                // Show message if no BIS channels
+                Text(
+                    "No BIS channels available for this device.",
+                    color = AppTextPrimary
+                )
             } else {
-                logi("LanguageSelectionScreen: Rendering ${device.bisChannels.size} BIS channels for ${device.address}")
+                // List available BIS channels
                 LazyColumn {
                     items(device.bisChannels) { bis ->
                         Card(
@@ -86,32 +100,41 @@ fun LanguageSelectionScreen(
                                 .padding(vertical = 6.dp)
                                 .clickable {
                                     try {
-                                        logd("LanguageSelectionScreen: BIS clicked → index=${bis.index} for ${device.address}")
+                                        logi("LanguageSelectionScreen: BIS channel clicked → index=${bis.index}, language=${bis.language}")
                                         onBisSelected(bis.index)
-                                        logi("LanguageSelectionScreen: BIS ${bis.index} selected for ${device.address}")
                                     } catch (e: Exception) {
-                                        loge("LanguageSelectionScreen: Failed handling BIS selection for ${device.address}", e)
+                                        loge("LanguageSelectionScreen: Error in onBisSelected callback", e)
                                     }
                                 },
+                            colors = CardDefaults.cardColors(RoyalBlue),
                             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                         ) {
                             Column(Modifier.padding(16.dp)) {
-                                // Language label
                                 Text(
-                                    text = bis.language,
+                                    bis.language,
                                     fontWeight = FontWeight.Medium,
-                                    fontSize = 16.sp
+                                    fontSize = 16.sp,
+                                    color = ButtonTextWhite
                                 )
-                                // Optional role
                                 bis.audioRole?.let {
-                                    Text("Role: $it", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        "Role: $it",
+                                        fontSize = 12.sp,
+                                        color = ButtonTextWhite.copy(alpha = 0.8f)
+                                    )
                                 }
-                                // Optional config
                                 bis.streamConfig?.let {
-                                    Text("Config: $it", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        "Config: $it",
+                                        fontSize = 12.sp,
+                                        color = ButtonTextWhite.copy(alpha = 0.8f)
+                                    )
                                 }
-                                // Always show BIS index
-                                Text("BIS Index: ${bis.index}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                                Text(
+                                    "BIS Index: ${bis.index}",
+                                    fontSize = 12.sp,
+                                    color = ButtonTextWhite
+                                )
                             }
                         }
                     }
@@ -119,12 +142,10 @@ fun LanguageSelectionScreen(
             }
         }
     }
-
-    logi("LanguageSelectionScreen: Rendered successfully for ${device.address}")
 }
 
 /**
- * Preview of [LanguageSelectionScreen] with fake data for UI testing.
+ * Preview for LanguageSelectionScreen using fake device and BIS channels.
  */
 @Preview(showBackground = true)
 @Composable
@@ -134,8 +155,12 @@ fun LanguageSelectionScreenPreview() {
 
     LanguageSelectionScreen(
         device = fakeDevice,
-        onBisSelected = {},
-        onBack = {}
+        onBisSelected = { bisIndex ->
+            logi("LanguageSelectionScreenPreview: BIS channel selected → index=$bisIndex")
+        },
+        onBack = {
+            logi("LanguageSelectionScreenPreview: Back pressed")
+        }
     )
 
     logi("LanguageSelectionScreenPreview: Preview rendered")

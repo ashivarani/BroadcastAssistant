@@ -102,7 +102,7 @@ class FakeAuracastBroadcasterSource(
                 }
 
                 val device = AuracastDevice(
-                    name = "Fake Speaker $index",
+                    name = "Fake Broadcaster $index",
                     address = "00:11:22:33:44:${index.toString().padStart(2, '0')}",
                     rssi = Random.nextInt(-90, -30),
                     bisChannels = bisChannels,
