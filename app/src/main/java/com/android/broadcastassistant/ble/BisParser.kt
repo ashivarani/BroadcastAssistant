@@ -2,29 +2,59 @@ package com.android.broadcastassistant.ble
 
 import android.os.ParcelUuid
 import com.android.broadcastassistant.data.BisChannel
+import com.android.broadcastassistant.util.logd
+import com.android.broadcastassistant.util.loge
+import com.android.broadcastassistant.util.logw
+import com.android.broadcastassistant.util.logv
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
 
 /**
- * Parse minimal BAA / BASE service-data bytes for Broadcast_ID + BIS metadata.
- * This parser is intentionally forgiving (real packets can vary); adjust for your transmitter format.
+ * Parser for Auracast BIS (Broadcast Isochronous Stream) service data.
+ *
+ * Responsibilities:
+ * - Extracts Broadcast ID and BIS metadata from raw service data bytes.
+ * - Interprets subgroup structures including codec config and metadata.
+ * - Builds [BisChannel] objects with language, role, and stream config if available.
+ *
+ * This parser is intentionally tolerant of malformed or truncated data,
+ * as real-world Auracast advertisements may vary.
  */
 object BisParser {
-    private val AURACAST_UUID = ParcelUuid.fromString("00001852-0000-1000-8000-00805f9b34fb")
 
+    /** UUID for Auracast Broadcast Audio service (16-bit: 0x1852). */
+    private val AURACAST_UUID: ParcelUuid =
+        ParcelUuid.fromString("00001852-0000-1000-8000-00805f9b34fb")
+
+    /**
+     * Parsed BIS data result.
+     *
+     * @property broadcastId The 24-bit Broadcast Identifier (nullable if parsing fails).
+     * @property bisChannels List of [BisChannel] objects parsed from the packet.
+     */
     data class ParsedData(
         val broadcastId: Int?,
         val bisChannels: List<BisChannel>
     )
 
+    /** @return Auracast Broadcast Audio Service UUID. */
     fun getAuracastUuid(): ParcelUuid = AURACAST_UUID
 
+    /**
+     * Parse a raw Auracast EA (Extended Advertising) service data payload.
+     *
+     * @param serviceData Raw byte array containing Auracast service data.
+     * @return [ParsedData] containing broadcast ID and BIS channel metadata.
+     */
     fun parse(serviceData: ByteArray?): ParsedData {
-        if (serviceData == null || serviceData.size < 4) return ParsedData(null, emptyList())
+        if (serviceData == null || serviceData.size < 4) {
+            logw("parse: Service data is null or too short (len=${serviceData?.size})")
+            return ParsedData(null, emptyList())
+        }
 
         val bisChannels = mutableListOf<BisChannel>()
-        try {
+        return try {
             val buf = ByteBuffer.wrap(serviceData).order(ByteOrder.LITTLE_ENDIAN)
 
             // Broadcast_ID is 3 bytes (little-endian)
@@ -32,93 +62,96 @@ object BisParser {
             val b1 = buf.get().toInt() and 0xFF
             val b2 = buf.get().toInt() and 0xFF
             val broadcastId = (b2 shl 16) or (b1 shl 8) or b0
+            logd("parse: BroadcastId=0x${broadcastId.toString(16)}")
 
-            if (!buf.hasRemaining()) return ParsedData(broadcastId, emptyList())
+            if (!buf.hasRemaining()) {
+                logw("parse: No data after broadcastId")
+                return ParsedData(broadcastId, emptyList())
+            }
 
-            buf.get() // PAwR interval (unused here)
-            if (!buf.hasRemaining()) return ParsedData(broadcastId, emptyList())
+            buf.get() // PAwR interval (ignored for now)
+            if (!buf.hasRemaining()) {
+                logw("parse: No data after PAwR interval")
+                return ParsedData(broadcastId, emptyList())
+            }
 
             val numSubgroups = buf.get().toInt() and 0xFF
+            logd("parse: Subgroups=$numSubgroups")
 
             for (i in 0 until numSubgroups) {
                 if (!buf.hasRemaining()) {
-                    // Log warning or handle incomplete subgroup data
-                    println("Buffer ended unexpectedly before parsing subgroup $i")
+                    logw("parse: Buffer ended unexpectedly before subgroup $i")
                     break
                 }
-                println("Parsing subgroup #$i")
 
-                // Read BIS bitfield (1 byte for up to 8 BIS)
+                // Read BIS bitfield (1 byte → up to 8 BIS channels)
                 val bisBitfield = buf.get().toInt() and 0xFF
                 val bisIndexes = (1..8).filter { bit -> (bisBitfield and (1 shl (bit - 1))) != 0 }
+                logv("parse: Subgroup $i → BIS bitfield=0x${bisBitfield.toString(16)}, indexes=$bisIndexes")
 
-                // Skip codec id (5 bytes)
+                // Skip codec ID (5 bytes)
                 if (buf.remaining() < 5) {
-                    println("Not enough bytes to skip codec id in subgroup $i")
+                    logw("parse: Not enough bytes to skip codec id in subgroup $i")
                     break
                 }
                 buf.position(buf.position() + 5)
 
+                // Codec config
                 if (!buf.hasRemaining()) {
-                    println("Buffer ended after codec id in subgroup $i")
+                    logw("parse: Buffer ended after codec id in subgroup $i")
                     break
                 }
                 val codecConfigLen = buf.get().toInt() and 0xFF
                 if (buf.remaining() < codecConfigLen) {
-                    println("Not enough bytes for codec config in subgroup $i")
+                    logw("parse: Not enough bytes for codec config in subgroup $i")
                     break
                 }
                 buf.position(buf.position() + codecConfigLen)
 
+                // Metadata
                 if (!buf.hasRemaining()) {
-                    println("Buffer ended before metadata length in subgroup $i")
+                    logw("parse: Buffer ended before metadata length in subgroup $i")
                     break
                 }
                 val metaLen = buf.get().toInt() and 0xFF
                 if (buf.remaining() < metaLen) {
-                    println("Not enough bytes for metadata in subgroup $i")
+                    logw("parse: Not enough bytes for metadata in subgroup $i")
                     break
                 }
                 val metaBytes = ByteArray(metaLen)
                 buf.get(metaBytes)
                 val metaStr = String(metaBytes, StandardCharsets.UTF_8)
+                logv("parse: Metadata subgroup $i = \"$metaStr\"")
 
-                // Extract language tag, fallback "Unknown"
+                // Extract metadata fields
                 val lang = Regex("lang=([a-z]{2,3})")
-                    .find(metaStr)
-                    ?.groupValues
-                    ?.get(1)
-                    ?.replaceFirstChar { it.uppercase() }
-                    ?: "Unknown"
+                    .find(metaStr)?.groupValues?.get(1)
+                    ?.replaceFirstChar { it.uppercase() } ?: "Unknown"
 
-                // Extract audio role if present (e.g., audio_role=Music)
                 val audioRole = Regex("audio_role=([a-zA-Z0-9_\\- ]+)")
-                    .find(metaStr)
-                    ?.groupValues
-                    ?.get(1)
+                    .find(metaStr)?.groupValues?.get(1)
 
-                // Extract stream config if present (e.g., stream_config=Stereo)
                 val streamConfig = Regex("stream_config=([a-zA-Z0-9_\\- ]+)")
-                    .find(metaStr)
-                    ?.groupValues
-                    ?.get(1)
+                    .find(metaStr)?.groupValues?.get(1)
 
+                // Add BIS channels for this subgroup
                 bisIndexes.forEach { idx ->
-                    bisChannels.add(
-                        BisChannel(
-                            index = idx,
-                            language = lang,
-                            audioRole = audioRole,
-                            streamConfig = streamConfig,
-                        )
+                    val bis = BisChannel(
+                        index = idx,
+                        language = lang,
+                        audioRole = audioRole,
+                        streamConfig = streamConfig,
                     )
+                    bisChannels.add(bis)
+                    logd("parse: Added BIS → ${bis.toDebugString()}")
                 }
             }
 
-            return ParsedData(broadcastId, bisChannels)
+            logd("parse: Parsed ${bisChannels.size} BIS channels total")
+            ParsedData(broadcastId, bisChannels)
         } catch (t: Throwable) {
-            t.printStackTrace()
-            return ParsedData(null, emptyList())
+            loge("parse: Exception during parsing", t)
+            ParsedData(null, emptyList())
         }
     }
 }
