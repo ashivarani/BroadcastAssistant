@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -12,92 +13,77 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.android.broadcastassistant.ui.screen.AuracastScreen
 import com.android.broadcastassistant.ui.screen.LanguageSelectionScreen
-import com.android.broadcastassistant.viewmodel.AuracastViewModel
 import com.android.broadcastassistant.util.logd
 import com.android.broadcastassistant.util.loge
-import com.android.broadcastassistant.util.logi
-import com.android.broadcastassistant.util.logw
+import com.android.broadcastassistant.viewmodel.AuracastViewModel
 
 /**
- * Navigation host for the Broadcast Assistant app.
+ * App navigation host for the Auracast Assistant application.
  *
- * ## Responsibilities
- * - Defines navigation graph using Jetpack Compose Navigation.
- * - Hosts the main **AuracastScreen** (device list, scanning, etc).
- * - Hosts the **LanguageSelectionScreen** for BIS (language/stream) selection.
+ * Manages navigation between the main Auracast device list screen and
+ * the language/BIS selection screen. Integrates with the [AuracastViewModel]
+ * to provide device state, scan state, and handle BIS selection.
  *
- * ## Usage
- * Place this composable at the root of your app (e.g., in `MainActivity.setContent`).
- *
- * Example:
- * ```
- * setContent {
- *     AppNavHost()
- * }
- * ```
- *
- * @param viewModel Shared [AuracastViewModel] injected into screens.
+ * @param viewModel The AuracastViewModel providing state and actions for the screens
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
 fun AppNavHost(viewModel: AuracastViewModel = viewModel()) {
     val navController = rememberNavController()
 
+    // Collect state from the ViewModel
+    val devices by viewModel.devices.collectAsState(initial = emptyList())
+    val isScanning by viewModel.isScanning.collectAsState(initial = false)
+    val permissionsGranted by viewModel.permissionsGranted.collectAsState(initial = false)
+    val statusMessage by viewModel.statusMessage.collectAsState(initial = "")
+
     NavHost(navController = navController, startDestination = "auracast") {
 
-        /**
-         * Route: "auracast"
-         * - Displays the main Auracast screen with device list and scanning controls.
-         */
+        // Auracast screen displaying device list
         composable("auracast") {
-            logd("AppNavHost: Navigating to AuracastScreen")
-            AuracastScreen(viewModel = viewModel)
-            logi("AppNavHost: AuracastScreen rendered")
+            AuracastScreen(
+                devices = devices,
+                isScanning = isScanning,
+                permissionsGranted = permissionsGranted,
+                statusMessage = statusMessage,
+                onToggleScan = {
+                    logd("AppNavHost: Scan toggle pressed")
+                    viewModel.toggleScan()
+                },
+                onDeviceClick = { device ->
+                    logd("AppNavHost: Navigating to language selection for ${device.address}")
+                    navController.navigate("language_selection/${device.address}")
+                }
+            )
         }
 
-        /**
-         * Route: "language_selection/{address}"
-         * - Displays the BIS (language/stream) selection screen for a specific device.
-         */
+        // Language selection screen for a selected device
         composable(
             "language_selection/{address}",
             arguments = listOf(navArgument("address") { type = NavType.StringType })
         ) { backStackEntry ->
             val address = backStackEntry.arguments?.getString("address")
-            if (address == null) {
-                logw("AppNavHost: Missing address argument in navigation")
-                return@composable
-            }
 
-            logd("AppNavHost: Navigating to LanguageSelectionScreen for $address")
-
-            // Collect latest device list from ViewModel state
-            val device = viewModel.devices.collectAsState().value.find { it.address == address }
+            // Safe lookup for the device by address
+            val device = devices.find { it.address == address }
             if (device != null) {
                 LanguageSelectionScreen(
                     device = device,
                     onBisSelected = { bisIndex ->
                         try {
-                            logd("AppNavHost: onBisSelected → BIS=$bisIndex for ${device.address}")
+                            logd("AppNavHost: BIS selected for ${device.address} → index=$bisIndex")
                             viewModel.selectBisChannel(device, bisIndex)
-                            logi("AppNavHost: BIS selection processed for ${device.address}")
                         } catch (e: Exception) {
-                            loge("AppNavHost: Failed to handle BIS selection for ${device.address}", e)
+                            loge("AppNavHost: Error selecting BIS for ${device.address}", e)
                         }
                     },
                     onBack = {
-                        try {
-                            logd("AppNavHost: onBack → Returning to previous screen")
-                            navController.popBackStack()
-                            logi("AppNavHost: Navigation back successful")
-                        } catch (e: Exception) {
-                            loge("AppNavHost: Failed to navigate back", e)
-                        }
+                        logd("AppNavHost: Back pressed from language selection")
+                        navController.popBackStack()
                     }
                 )
-                logi("AppNavHost: LanguageSelectionScreen rendered for $address")
             } else {
-                logw("AppNavHost: Device with address=$address not found in ViewModel state")
+                loge("AppNavHost: Device not found for address=$address")
             }
         }
     }
