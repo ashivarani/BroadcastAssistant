@@ -1,8 +1,9 @@
 package com.android.broadcastassistant.viewmodel
 
+import com.android.broadcastassistant.R
 import android.app.Application
-import android.graphics.Color
 import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,11 +17,13 @@ import com.android.broadcastassistant.util.logi
 import com.android.broadcastassistant.util.logv
 import com.android.broadcastassistant.util.logw
 import com.android.broadcastassistant.util.loge
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-
+import kotlinx.coroutines.withTimeout
+import androidx.compose.ui.graphics.Color
 /**
  * ViewModel that manages Auracast scanning, BIS selection, and state updates.
  *
@@ -42,7 +45,7 @@ open class AuracastViewModel(application: Application) : AndroidViewModel(applic
     val devices: StateFlow<List<AuracastDevice>> = _devices
 
     /** Scanning status helpers */
-    private val _statusColor = MutableStateFlow(Color.BLACK)
+    private val _statusColor = MutableStateFlow(Color.Black)
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning
 
@@ -110,72 +113,58 @@ open class AuracastViewModel(application: Application) : AndroidViewModel(applic
             logd(TAG, "startScan() called")
 
             if (isRunningOnEmulator()) {
-                // Emulator: simulate broadcasters instead of scanning
                 fakeSource.startFake()
                 _isScanning.value = true
-                _statusMessage.value = "Emulator fake scan started"
-                logi(TAG, "Started fake scan on emulator")
-                logv(TAG, "Fake devices count after start: ${_devices.value.size}")
+                _statusMessage.value = getApplication<Application>().getString(R.string.scan_started_fake)
+                _statusColor.value = Color(ContextCompat.getColor(getApplication(), R.color.status_scanning))
                 return
             }
 
-            // Ensure permissions are granted
             if (!_permissionsGranted.value) {
-                logw(TAG, "Cannot start scan — permissions not granted")
-                _statusMessage.value = "Please grant Bluetooth permissions to scan."
+                _statusMessage.value = getApplication<Application>().getString(R.string.scan_permissions_required)
                 return
             }
 
-            // Prevent duplicate scans
-            if (_isScanning.value) {
-                logw(TAG, "Scan already in progress → ignoring startScan()")
-                return
-            }
+            if (_isScanning.value) return
 
-            // Start real scanner
-            _statusMessage.value = ""
+            _statusMessage.value = getApplication<Application>().getString(R.string.scan_starting)
+            _statusColor.value = Color(ContextCompat.getColor(getApplication(), R.color.status_scanning))
             periodicScanner.startScanningAuracastEa()
             _isScanning.value = true
-            logi(TAG, "Started periodic advertising scan")
         } catch (e: Exception) {
             loge(TAG, "Failed to start scan", e)
         }
     }
+
 
     /**
      * Stops ongoing scan (fake or real).
      */
     fun stopScan() {
         try {
-            logd(TAG, "stopScan() called")
-
-            if (!_isScanning.value) {
-                logw(TAG, "No active scan to stop")
-                return
-            }
+            if (!_isScanning.value) return
 
             if (isRunningOnEmulator()) {
-                // Emulator → stop fake scan
                 fakeSource.stopFake()
                 _isScanning.value = false
                 val count = _devices.value.size
-                _statusMessage.value = "Fake scan stopped — $count devices shown"
-                _statusColor.value = Color.BLACK
-                logi(TAG, "Stopped fake scan on emulator with $count devices")
+                _statusMessage.value = getApplication<Application>()
+                    .getString(R.string.scan_stopped_fake, count)
+                _statusColor.value = Color(ContextCompat.getColor(getApplication(), R.color.status_idle))
                 return
             }
 
-            // Stop real scanner
             periodicScanner.stopScanningAuracastEa()
             _isScanning.value = false
             val count = _devices.value.size
-            _statusMessage.value = "Scan stopped — $count devices found"
-            _statusColor.value = Color.BLACK
-            logi(TAG, "Stopped periodic advertising scan with $count devices")
+            _statusMessage.value = getApplication<Application>()
+                .getString(R.string.scan_stopped_real, count)
+            _statusColor.value = Color(ContextCompat.getColor(getApplication(), R.color.status_idle))
         } catch (e: Exception) {
             loge(TAG, "Failed to stop scan", e)
         }
     }
+
 
     /**
      * Toggles scanning state between start and stop.
@@ -197,13 +186,30 @@ open class AuracastViewModel(application: Application) : AndroidViewModel(applic
      */
     fun selectBisChannel(device: AuracastDevice, bisIndex: Int) {
         viewModelScope.launch {
+            val bis = device.bisChannels.find { it.index == bisIndex }
+            val lang = bis?.language ?: "Unknown"
+
+            _statusMessage.value = getApplication<Application>()
+                .getString(R.string.switching_language, lang)
+            _statusColor.value = Color(ContextCompat.getColor(getApplication(), R.color.status_switching))
+
             try {
-                logi(TAG, "Phone is receiver → selecting BIS $bisIndex on ${device.address}")
-                bisSelectionManager.selectBisChannel(device, bisIndex)
-                logv(TAG, "Selection successful for device=${device.name}, bisIndex=$bisIndex")
-            } catch (e: Exception) {
-                logw(TAG, "Failed to select BIS: ${e.message}")
-                loge(TAG, "Error selecting BIS", e)
+                withTimeout(5000) {
+                    bisSelectionManager.selectBisChannel(device, bisIndex)
+                }
+                _statusMessage.value = getApplication<Application>()
+                    .getString(R.string.connected_language, lang)
+                _statusColor.value = Color(ContextCompat.getColor(getApplication(), R.color.status_success))
+
+            } catch (_: TimeoutCancellationException) {
+                _statusMessage.value = getApplication<Application>()
+                    .getString(R.string.switch_timeout, lang)
+                _statusColor.value = Color(ContextCompat.getColor(getApplication(), R.color.status_error))
+
+            } catch (_: Exception) {
+                _statusMessage.value = getApplication<Application>()
+                    .getString(R.string.switch_failed)
+                _statusColor.value = Color(ContextCompat.getColor(getApplication(), R.color.status_error))
             }
         }
     }

@@ -1,40 +1,42 @@
 package com.android.broadcastassistant.ui.theme
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// Custom Material 3 typography styles
-val Typography = Typography(
+// Base custom typography (sizes + weights only, no colors hardcoded)
+private val BaseTypography = Typography(
     displayLarge = TextStyle(
         fontWeight = FontWeight.Bold,
-        fontSize = 36.sp, // Large text for prominent headings
+        fontSize = 36.sp
     ),
     headlineMedium = TextStyle(
         fontWeight = FontWeight.SemiBold,
-        fontSize = 24.sp, // Medium headings
+        fontSize = 24.sp
     ),
     bodyLarge = TextStyle(
-        fontSize = 16.sp, // Default body text
+        fontSize = 16.sp
     ),
     labelLarge = TextStyle(
         fontWeight = FontWeight.Medium,
-        fontSize = 14.sp, // Labels, buttons, or small text
+        fontSize = 14.sp
     )
 )
 
-/*
-Optional: default Typography template for reference
-val DefaultTypography = Typography(
-    bodyLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.5.sp
+/**
+ * Returns Typography that adapts to current MaterialTheme colors
+ * so text colors auto-adjust in light/dark/dynamic themes.
+ */
+@Composable
+fun appTypography(): Typography {
+    val colors = MaterialTheme.colorScheme
+    return BaseTypography.copy(
+        displayLarge = BaseTypography.displayLarge.copy(color = colors.onBackground),
+        headlineMedium = BaseTypography.headlineMedium.copy(color = colors.onBackground),
+        bodyLarge = BaseTypography.bodyLarge.copy(color = colors.onSurface),
+        labelLarge = BaseTypography.labelLarge.copy(color = colors.onPrimary)
     )
-    // Additional styles can be overridden as needed:
-    // titleLarge, labelSmall, etc.
-)
-*/
+}

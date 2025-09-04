@@ -1,14 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
-    <color name="light_blue_400">#FF29B6F6</color>
-    <color name="light_blue_600">#FF039BE5</color>
-    <color name="gray_400">#FFBDBDBD</color>
-    <color name="gray_600">#FF757575</color>
+
+    <!-- Brand / Primary Colors -->
+    <color name="color_primary">#1976D2</color> <!-- Royal Blue -->
+    <color name="color_primary_variant">#0D47A1</color> <!-- Dark Blue -->
+    <color name="color_on_primary">#FFFFFF</color> <!-- White text on primary -->
+
+    <!-- Backgrounds & Surfaces -->
+    <color name="background_primary">#B3E5FC</color> <!-- Light Sky Blue -->
+    <color name="surface_primary">#FFFFFF</color> <!-- White cards/surfaces -->
+
+    <!-- Text Colors -->
+    <color name="text_primary">#0D47A1</color> <!-- Dark Blue -->
+    <color name="text_secondary">#333333</color> <!-- Neutral dark gray -->
+
+    <!-- Status / State Colors -->
+    <color name="status_idle">#000000</color>   <!-- Black -->
+    <color name="status_scanning">#FFA000</color> <!-- Amber -->
+    <color name="status_switching">#1976D2</color> <!-- Royal Blue -->
+    <color name="status_success">#2E7D32</color> <!-- Green -->
+    <color name="status_error">#D32F2F</color>   <!-- Red -->
+
+    <!-- Neutral Palette -->
+    <color name="gray_400">#BDBDBD</color>
+    <color name="gray_600">#757575</color>
+    <color name="black">#000000</color>
+    <color name="white">#FFFFFF</color>
+
 </resources>

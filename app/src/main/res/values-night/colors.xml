@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Brand / Primary Colors -->
+    <color name="color_primary">#90CAF9</color> <!-- Light Blue variant -->
+    <color name="color_primary_variant">#1976D2</color> <!-- Keep Royal Blue -->
+    <color name="color_on_primary">#000000</color> <!-- Black text on light primary -->
+
+    <!-- Backgrounds & Surfaces -->
+    <color name="background_primary">#121212</color> <!-- Dark background -->
+    <color name="surface_primary">#1E1E1E</color> <!-- Dark surface -->
+
+    <!-- Text Colors -->
+    <color name="text_primary">#FFFFFF</color> <!-- White -->
+    <color name="text_secondary">#BDBDBD</color> <!-- Light gray -->
+
+    <!-- Status / State Colors -->
+    <color name="status_idle">#FFFFFF</color>   <!-- White in dark mode -->
+    <color name="status_scanning">#FFB300</color> <!-- Bright Amber -->
+    <color name="status_switching">#90CAF9</color> <!-- Light Blue -->
+    <color name="status_success">#66BB6A</color> <!-- Soft Green -->
+    <color name="status_error">#EF5350</color>   <!-- Softer Red -->
+
+    <!-- Neutral Palette -->
+    <color name="gray_400">#BDBDBD</color>
+    <color name="gray_600">#757575</color>
+    <color name="black">#000000</color>
+    <color name="white">#FFFFFF</color>
+
+</resources>

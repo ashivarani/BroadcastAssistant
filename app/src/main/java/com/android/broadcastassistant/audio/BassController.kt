@@ -61,7 +61,9 @@ class BassController(private val context: Context) {
      * - Disconnect after completion.
      */
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    suspend fun sendControlPoint(deviceAddress: String, controlPointData: ByteArray) {
+    suspend fun sendControlPoint( deviceAddress: String,
+                                  controlPointData: ByteArray,
+                                  autoDisconnect: Boolean = true) {
         try {
             logi("sendControlPoint: Sending control point to $deviceAddress")
 
@@ -112,11 +114,13 @@ class BassController(private val context: Context) {
             writeCharacteristicSuspend(gatt, controlPointChar, controlPointData)
             logi("sendControlPoint: Control Point write completed for $deviceAddress")
 
-            // Always disconnect
-            disconnect()
+            // Disconnect only if requested
+            if (autoDisconnect) {
+                disconnect()
+            }
         } catch (e: Exception) {
             loge("sendControlPoint: Unexpected error", e)
-            disconnect()
+            if (autoDisconnect) disconnect()
         }
     }
 
