@@ -89,7 +89,7 @@ class BisSelectionManager(
 
                     try {
                         // Send to BASS
-                        bassController.sendControlPoint(device.address, cpData)
+                        bassController.sendControlPoint(device.address, cpData,false)
                         logi("selectBisChannel: BIS switch command sent successfully to ${device.address}")
                     } catch (se: SecurityException) {
                         loge(
