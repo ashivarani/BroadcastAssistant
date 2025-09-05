@@ -2,6 +2,7 @@ package com.android.broadcastassistant.ble
 
 import android.os.ParcelUuid
 import com.android.broadcastassistant.data.BisChannel
+import com.android.broadcastassistant.util.UuidUtils
 import com.android.broadcastassistant.util.logd
 import com.android.broadcastassistant.util.loge
 import com.android.broadcastassistant.util.logw
@@ -24,9 +25,7 @@ import java.nio.charset.StandardCharsets
 object BisParser {
 
     /** UUID for Auracast Broadcast Audio service (16-bit: 0x1852). */
-    private val AURACAST_UUID: ParcelUuid =
-        ParcelUuid.fromString("00001852-0000-1000-8000-00805f9b34fb")
-
+    private val AURACAST_UUID: ParcelUuid = UuidUtils.AURACAST_SERVICE_UUID
     /**
      * Parsed BIS data result.
      *

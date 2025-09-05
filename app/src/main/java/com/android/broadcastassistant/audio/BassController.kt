@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
+import com.android.broadcastassistant.util.UuidUtils
 import com.android.broadcastassistant.util.logd
 import com.android.broadcastassistant.util.loge
 import com.android.broadcastassistant.util.logi
@@ -39,10 +40,8 @@ import kotlin.coroutines.resumeWithException
 class BassController(private val context: Context) {
 
     companion object {
-        private val BASS_SERVICE_UUID: UUID =
-            UUID.fromString("0000184F-0000-1000-8000-00805f9b34fb")
-        private val BASS_CONTROL_POINT_UUID: UUID =
-            UUID.fromString("00002B2B-0000-1000-8000-00805f9b34fb")
+        private val BASS_SERVICE_UUID: UUID = UuidUtils.BASS_SERVICE_UUID
+        private val BASS_CONTROL_POINT_UUID: UUID = UuidUtils.BASS_CONTROL_POINT_UUID
     }
 
     private var bluetoothGatt: BluetoothGatt? = null
