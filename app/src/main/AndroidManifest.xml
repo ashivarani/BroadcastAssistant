@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="com.android.broadcastassistant">
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Wi-Fi related permission for discovering nearby Wi-Fi devices (Android 13+) -->
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />

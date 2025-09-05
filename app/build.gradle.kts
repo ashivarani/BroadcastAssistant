@@ -1,4 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.text.SimpleDateFormat
+import java.util.Date
 
 plugins {
     alias(libs.plugins.android.application)
@@ -6,17 +8,27 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+/**
+ * Main Android configuration block.
+ * Sets namespace, SDK versions, build types, Kotlin options, Compose features,
+ * and packaging options for native libraries.
+ */
+//noinspection OldTargetApi
 android {
+    /** Application namespace (used for R class generation and code structure) */
     namespace = "com.android.broadcastassistant"
     compileSdk = 36
 
     defaultConfig {
         applicationId = "com.android.broadcastassistant"
         minSdk = 26
-        //noinspection OldTargetApi
         targetSdk = 34
 
-        // Versioning
+        /**
+         * Versioning configuration.
+         * versionCode is calculated as: major * 10000 + minor * 100 + patch
+         * versionName is "major.minor.patch"
+         */
         val versionMajor = 2
         val versionMinor = 1
         val versionPatch = 2
@@ -24,22 +36,28 @@ android {
         versionCode = (versionMajor * 10000) + (versionMinor * 100) + versionPatch
         versionName = "$versionMajor.$versionMinor.$versionPatch"
 
+        /** Test instrumentation runner */
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         debug {
-            // Keep debug symbols for native libraries
+            /** Keep full debug symbols in debug builds for native libraries */
             ndk {
                 debugSymbolLevel = "FULL"
             }
         }
         release {
+            /** Disable minification and apply ProGuard rules */
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            /** Strip debug symbols minimally to reduce APK size in release */
+            ndk {
+                debugSymbolLevel = "SYMBOL_TABLE"
+            }
         }
     }
 
@@ -55,9 +73,29 @@ android {
     }
 
     buildFeatures {
+        /** Enable Jetpack Compose */
         compose = true
     }
+
+    /**
+     * Packaging options for native libraries.
+     * Keeps debug symbols for problematic prebuilt libraries to avoid stripping warnings.
+     */
+    packaging {
+        jniLibs {
+            // Tell Gradle to keep these libraries as-is
+            keepDebugSymbols += listOf(
+                "libandroidx.graphics.path.so",
+                "libbarhopper_v3.so"
+            )
+        }
+    }
 }
+
+/**
+ * Dependencies for the project.
+ * Includes core, lifecycle, Compose, navigation, testing, and third-party libraries.
+ */
 //noinspection UseTomlInstead
 dependencies {
     implementation(libs.androidx.core.ktx)
@@ -80,7 +118,6 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
-    // Extra libraries
     implementation(libs.androidx.compose.ui.ui)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -94,27 +131,53 @@ dependencies {
     implementation(libs.androidx.core.ktx)
 }
 
-// Export APK tasks
+/**
+ * Provider for the app version name.
+ * Fallbacks to "0.0.0" if versionName is not set.
+ */
 val vNameProvider = provider { android.defaultConfig.versionName ?: "0.0.0" }
 
+/**
+ * Helper function to generate human-readable date for folder naming.
+ * Format: Sep_04_2025
+ */
+fun getDateFolderName(): String {
+    val sdf = SimpleDateFormat("MMM_dd_yyyy") // Month (short), day, year
+    return sdf.format(Date())
+}
+
+/**
+ * Task to export the Debug APK.
+ * - Depends on `assembleDebug`.
+ * - Copies the APK into a folder named by the current date.
+ * - Renames the APK to include the version only.
+ */
 tasks.register<Copy>("exportDebugApk") {
     dependsOn("assembleDebug")
 
     val vName = vNameProvider.get()
+    val dateFolder = getDateFolderName()
     val apkDir = layout.buildDirectory.dir("outputs/apk/debug")
 
     from(apkDir.map { it.file("app-debug.apk") })
-    into(layout.projectDirectory.dir("releases").dir(vName))
-    rename { "app-debug-v${vName}.apk" }
+    into(layout.projectDirectory.dir("releases").dir(dateFolder)) // Folder by date
+    rename { "app-debug-v${vName}.apk" } // APK filename includes version only
 }
 
+/**
+ * Task to export the Release APK.
+ * - Depends on `assembleRelease`.
+ * - Copies the APK into a folder named by the current date.
+ * - Renames the APK to include the version only.
+ */
 tasks.register<Copy>("exportReleaseApk") {
     dependsOn("assembleRelease")
 
     val vName = vNameProvider.get()
+    val dateFolder = getDateFolderName()
     val apkDir = layout.buildDirectory.dir("outputs/apk/release")
 
     from(apkDir.map { it.file("app-release.apk") })
-    into(layout.projectDirectory.dir("releases").dir(vName))
-    rename { "app-release-v${vName}.apk" }
+    into(layout.projectDirectory.dir("releases").dir(dateFolder)) // Folder by date
+    rename { "app-release-v${vName}.apk" } // APK filename includes version only
 }
