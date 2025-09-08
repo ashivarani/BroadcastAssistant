@@ -24,16 +24,14 @@ import com.android.broadcastassistant.util.logi
 import com.android.broadcastassistant.util.loge
 
 /**
- * Composable screen displaying a list of Auracast devices, scan status, and controls.
+ * Main screen displaying Auracast devices and scanning status.
  *
- * Handles scanning toggle, device click actions, and displays Bluetooth permission status.
- *
- * @param devices List of discovered Auracast devices
- * @param isScanning Boolean indicating whether scanning is active
- * @param permissionsGranted Boolean indicating whether Bluetooth permissions are granted
- * @param statusMessage Optional status message displayed at the top of the screen
- * @param onToggleScan Callback triggered when the scan button is pressed
- * @param onDeviceClick Callback triggered when a device card is clicked
+ * @param devices List of discovered Auracast devices to show
+ * @param isScanning Whether scanning is currently active
+ * @param permissionsGranted Bluetooth permission state
+ * @param statusMessage Optional status message to show at the top
+ * @param onToggleScan Lambda triggered when user presses the scan button
+ * @param onDeviceClick Lambda triggered when a device card is clicked
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,7 +96,7 @@ fun AuracastScreen(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            // Show status message if provided
+            // Show status message from ViewModel at top of screen
             if (statusMessage.isNotBlank()) {
                 Text(
                     text = statusMessage,
@@ -107,7 +105,7 @@ fun AuracastScreen(
                 )
             }
 
-            // Handle missing Bluetooth permissions
+            // If Bluetooth permissions are missing, show red warning
             if (!permissionsGranted) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -122,21 +120,8 @@ fun AuracastScreen(
                 return@Column
             }
 
-            // Show scanning message if no devices found yet
-            if (devices.isEmpty()) {
-                if (isScanning) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Scanning for Auracast devices...",
-                            style = MaterialTheme.typography.bodyMedium.copy(color = AppTextPrimary)
-                        )
-                    }
-                }
-            } else {
-                // Display list of devices
+            // If devices are found, show list using LazyColumn
+            if (devices.isNotEmpty()) {
                 LazyColumn {
                     items(devices) { deviceItem ->
                         AuracastDeviceCardSimple(device = deviceItem) {
@@ -149,16 +134,27 @@ fun AuracastScreen(
                         }
                     }
                 }
+            } else if (isScanning) {
+                // If scanning and no devices yet, show placeholder message
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Scanning for Auracast devices...",
+                        style = MaterialTheme.typography.bodyMedium.copy(color = AppTextPrimary)
+                    )
+                }
             }
         }
     }
 }
 
 /**
- * Simple card displaying Auracast device information.
+ * Simple card composable showing Auracast device info.
  *
- * @param device AuracastDevice instance to display
- * @param onClick Callback triggered when card is clicked
+ * @param device Device data to display
+ * @param onClick Lambda triggered when card is clicked
  */
 @Composable
 fun AuracastDeviceCardSimple(
@@ -201,7 +197,7 @@ fun AuracastDeviceCardSimple(
 }
 
 /**
- * Preview for AuracastScreen with fake devices.
+ * Preview of AuracastScreen with fake devices for Compose Preview.
  */
 @Preview(showBackground = true, apiLevel = 34)
 @Composable
