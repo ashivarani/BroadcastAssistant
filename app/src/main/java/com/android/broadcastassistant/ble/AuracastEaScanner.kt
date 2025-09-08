@@ -13,7 +13,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.core.util.size
-import com.android.broadcastassistant.audio.FakeAuracastBroadcasterSource
 import com.android.broadcastassistant.data.AuracastDevice
 import com.android.broadcastassistant.data.BisChannel
 import com.android.broadcastassistant.util.logd
@@ -31,7 +30,6 @@ import kotlinx.coroutines.flow.StateFlow
  * - Scanning BLE extended advertisements that carry Auracast broadcast information.
  * - Parsing BIS (Broadcast Isochronous Stream) metadata via [BisParser].
  * - Maintaining and publishing a flow of discovered [com.android.broadcastassistant.data.AuracastDevice]s sorted by RSSI.
- * - Supporting fake broadcasters when running in an emulator environment (for testing).
  *
  * Usage:
  * ```
@@ -70,14 +68,9 @@ class AuracastEaScanner(private val context: Context) {
     /** Public immutable view of broadcasters flow. */
     val broadcasters: StateFlow<List<AuracastDevice>> = _broadcastersFlow
 
-    /** Fake data source used when scanning in emulator mode. */
-    private var fakeSource: FakeAuracastBroadcasterSource? = null
-
     /**
      * Start scanning for Auracast EA packets.
-     *
-     * - Uses fake data if running in an emulator.
-     * - Otherwise, starts real BLE scanning with a filter on the Auracast service UUID.
+     * starts real BLE scanning with a filter on the Auracast service UUID.
      */
     fun startScanningAuracastEa() {
         try {
@@ -88,18 +81,7 @@ class AuracastEaScanner(private val context: Context) {
                 loge("startScanningAuracastEa: Missing required scan permissions")
                 return
             }
-
-            // Emulator detection
-            val isEmulator = Build.FINGERPRINT.contains("generic", ignoreCase = true) ||
-                    Build.MODEL.contains("sdk_gphone", ignoreCase = true)
-
-            if (isEmulator) {
-                logi("startScanningAuracastEa: Emulator detected → using fake broadcaster source")
-                fakeSource = FakeAuracastBroadcasterSource(_broadcastersFlow).also { it.startFake() }
-                return
-            }
-
-            // Real scan setup
+            // scan setup
             val filter = ScanFilter.Builder()
                 .setServiceUuid(AURACAST_SERVICE_UUID)
                 .build()
@@ -121,17 +103,11 @@ class AuracastEaScanner(private val context: Context) {
 
     /**
      * Stop scanning for Auracast EA advertisements.
-     *
-     * - Stops fake data source if running in emulator.
      * - Stops BLE scanning otherwise.
      */
     fun stopScanningAuracastEa() {
         try {
             logd("stopScanningAuracastEa: Entered")
-
-            fakeSource?.stopFake()
-            fakeSource = null
-
             bluetoothLeScanner?.stopScan(auracastScanCallback)
             logi("stopScanningAuracastEa: Scan stopped successfully")
         } catch (se: SecurityException) {
