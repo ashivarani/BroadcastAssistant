@@ -1,142 +1,125 @@
 package com.android.broadcastassistant.viewmodel
 
-import com.android.broadcastassistant.R
 import android.app.Application
 import android.os.Build
 import androidx.annotation.RequiresApi
-import androidx.core.content.ContextCompat
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.android.broadcastassistant.R
+import com.android.broadcastassistant.audio.BassGattManager
 import com.android.broadcastassistant.ble.AuracastEaScanner
-import com.android.broadcastassistant.audio.BassController
 import com.android.broadcastassistant.ble.BisSelectionManager
 import com.android.broadcastassistant.data.AuracastDevice
-import com.android.broadcastassistant.util.*
+import com.android.broadcastassistant.data.CommandLog
+import com.android.broadcastassistant.util.logd
+import com.android.broadcastassistant.util.loge
+import com.android.broadcastassistant.util.logi
+import com.android.broadcastassistant.util.logw
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
-import androidx.compose.ui.graphics.Color
 
-/**
- * ViewModel responsible for:
- * - Scanning Auracast broadcasters via BLE.
- * - Maintaining a list of discovered devices.
- * - Handling BIS (Broadcast Isochronous Stream) channel selection.
- * - Updating UI with scanning/connection status and colors.
- *
- * This ViewModel uses:
- * - [AuracastEaScanner] → handles BLE scanning for Auracast broadcasters.
- * - [BassController] & [BisSelectionManager] → manages BIS channel switching.
- *
- * UI Observables:
- * - [devices] → currently discovered Auracast devices.
- * - [isScanning] → scanning state (true/false).
- * - [permissionsGranted] → BLE permissions status.
- * - [statusMessage] → message describing current scan/connection state.
- * - [statusColor] → color corresponding to the state (for UI feedback).
- */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-open class AuracastViewModel(application: Application) : AndroidViewModel(application) {
+class AuracastViewModel(application: Application) : AndroidViewModel(application) {
 
-    /** Flow holding currently discovered Auracast devices. */
+    /** List of currently discovered Auracast devices */
     private val _devices = MutableStateFlow<List<AuracastDevice>>(emptyList())
     val devices: StateFlow<List<AuracastDevice>> = _devices
 
-    /** Flow holding current scanning status (true if scanning). */
+    /** List of command logs for UI */
+    private val _commandLogs = MutableStateFlow<List<CommandLog>>(emptyList())
+
+    /** Current scanning state */
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning
 
-    /** Flow holding BLE permission granted state. */
+    /** Bluetooth permission state */
     private val _permissionsGranted = MutableStateFlow(false)
     val permissionsGranted: StateFlow<Boolean> = _permissionsGranted
 
-    /** Flow holding a human-readable status message for UI. */
+    /** Status message shown on UI (scanning, connecting, error) */
     private val _statusMessage = MutableStateFlow("")
     val statusMessage: StateFlow<String> = _statusMessage
 
-    /** Flow holding a color representing the current state (scanning, success, error, etc). */
+    /** Status text color for UI */
     private val _statusColor = MutableStateFlow(Color.Black)
-    val statusColor: StateFlow<Color> = _statusColor
+    /** Controller for BASS functionality */
+    private val bassGattManager = BassGattManager(getApplication<Application>().applicationContext)
 
-    // Core Auracast components:
-    private val bassController = BassController(getApplication<Application>().applicationContext)
-
-    /** BIS selection manager → used to switch BIS channels on selected devices. */
+    /** Manager handling BIS channel selection logic, now logging commands */
     private val bisSelectionManager = BisSelectionManager(
-        onDeviceUpdate = { updatedDevices -> _devices.value = updatedDevices },
+        onDeviceUpdate = { updatedDevices ->
+            logd("Devices updated → ${updatedDevices.size} devices")
+            _devices.value = updatedDevices
+        },
         getCurrentDevices = { _devices.value },
-        bassController = bassController
+        bassGattManager = bassGattManager,
+        onCommandLog = { commandLog ->
+            val updatedList = _commandLogs.value.toMutableList()
+            updatedList.add(commandLog)
+            _commandLogs.value = updatedList
+            logd("Command log added → ${commandLog.message}")
+        }
     )
 
-    /** BLE scanner for Auracast broadcasters. */
+    /** Scanner for Auracast Extended Advertising packets */
     private val periodicScanner = AuracastEaScanner(getApplication<Application>().applicationContext)
 
     init {
-        // Collect live scan results as they arrive
+        // Collect scanned devices immediately
         viewModelScope.launch {
             try {
-                logi("AuracastViewModel: Initializing AuracastEaScanner for real devices")
+                logi("Initializing AuracastEaScanner")
                 periodicScanner.broadcasters.collectLatest { scannedDevices ->
-                    logv("AuracastViewModel: Scanned devices updated → count=${scannedDevices.size}")
                     _devices.value = scannedDevices
+                    logd("Collected ${scannedDevices.size} scanned devices")
                 }
             } catch (e: Exception) {
-                loge("AuracastViewModel: Error initializing scanner", e)
+                loge("Error initializing scanner", e)
             }
         }
     }
 
-    /**
-     * Updates BLE permission state.
-     * If permissions are revoked, scanning will stop automatically.
-     *
-     * @param granted true if permissions granted, false otherwise
-     */
+    /** Update Bluetooth permission state */
     fun updatePermissionsGranted(granted: Boolean) {
         _permissionsGranted.value = granted
-        if (!granted) {
-            logw("AuracastViewModel: Permissions revoked → stopping scan")
-            stopScan()
-        }
+        logd("Permissions updated → granted=$granted")
+        if (!granted) stopScan()
     }
 
-    /**
-     * Starts scanning for Auracast devices.
-     * Requires BLE permissions to be granted.
-     */
+    /** Start Auracast scanning */
     fun startScan() {
         try {
-            logd("AuracastViewModel: startScan() called")
+            logd("startScan() called")
 
-            // Ensure permissions are available
             if (!_permissionsGranted.value) {
-                _statusMessage.value =
-                    getApplication<Application>().getString(R.string.scan_permissions_required)
+                _statusMessage.value = getApplication<Application>().getString(R.string.scan_permissions_required)
+                _statusColor.value = Color.Red
+                logw("Cannot start scan, permissions missing")
                 return
             }
 
-            // Prevent duplicate scanning
             if (_isScanning.value) return
 
-            // Update UI and start scanner
-            _statusMessage.value =
-                getApplication<Application>().getString(R.string.scan_starting)
-            _statusColor.value =
-                Color(ContextCompat.getColor(getApplication(), R.color.status_scanning))
+            _devices.value = emptyList()
+            periodicScanner.clearDevices()
             periodicScanner.startScanningAuracastEa()
             _isScanning.value = true
+            _statusMessage.value =  getApplication<Application>().getString(
+                R.string.start_scan)
+            _statusColor.value = Color.Blue
+            logi("Scan started successfully")
         } catch (e: Exception) {
-            loge("AuracastViewModel: Failed to start scan", e)
+            loge("Failed to start scan", e)
+            _statusMessage.value = "Scan start failed"
+            _statusColor.value = Color.Red
         }
     }
 
-    /**
-     * Stops ongoing BLE scanning.
-     * Updates UI with number of devices discovered so far.
-     */
+    /** Stop Auracast scanning */
     fun stopScan() {
         try {
             if (!_isScanning.value) return
@@ -144,35 +127,32 @@ open class AuracastViewModel(application: Application) : AndroidViewModel(applic
             periodicScanner.stopScanningAuracastEa()
             _isScanning.value = false
             val count = _devices.value.size
-
-            _statusMessage.value =
-                getApplication<Application>().getString(R.string.scan_stopped_real, count)
-            _statusColor.value =
-                Color(ContextCompat.getColor(getApplication(), R.color.status_idle))
+            _statusMessage.value = getApplication<Application>().getString(
+                R.string.scan_stopped_real, count)
+            _statusColor.value = Color.Black
+            logi("Scan stopped with $count devices")
         } catch (e: Exception) {
-            loge("AuracastViewModel: Failed to stop scan", e)
+            loge("Failed to stop scan", e)
+            _statusMessage.value = "Scan stop failed"
+            _statusColor.value = Color.Red
         }
     }
 
-    /**
-     * Toggles scanning state.
-     * - If scanning → stops.
-     * - If stopped → starts scanning.
-     */
+    /** Toggle scanning state */
     fun toggleScan() {
-        logd("AuracastViewModel: toggleScan() called")
+        logd("toggleScan() called")
         try {
             if (_isScanning.value) stopScan() else startScan()
         } catch (e: Exception) {
-            loge("AuracastViewModel: Error toggling scan", e)
+            loge("Error toggling scan", e)
         }
     }
 
     /**
-     * Selects a BIS (Broadcast Isochronous Stream) channel on a given Auracast device.
+     * Select a BIS channel for a device and log command messages.
      *
-     * @param device The target Auracast device.
-     * @param bisIndex Index of the BIS channel to select.
+     * @param device AuracastDevice to select BIS for
+     * @param bisIndex Index of BIS channel
      */
     fun selectBisChannel(device: AuracastDevice, bisIndex: Int) {
         viewModelScope.launch {
@@ -180,51 +160,36 @@ open class AuracastViewModel(application: Application) : AndroidViewModel(applic
                 val bis = device.bisChannels.find { it.index == bisIndex }
                 val lang = bis?.language ?: "Unknown"
 
-                // Update UI → starting language switch
-                _statusMessage.value =
-                    getApplication<Application>().getString(R.string.switching_language, lang)
-                _statusColor.value =
-                    Color(ContextCompat.getColor(getApplication(), R.color.status_switching))
+                // Update status for UI
+                _statusMessage.value = getApplication<Application>().getString(R.string.switching_language, lang)
+                _statusColor.value = Color.Yellow
 
-                // Attempt BIS selection with timeout
-                withTimeout(5000) {
-                    bisSelectionManager.selectBisChannel(device, bisIndex)
-                }
+                // Perform BIS selection
+                bisSelectionManager.selectBisChannel(device, bisIndex)
 
-                // Success → update UI
-                _statusMessage.value =
-                    getApplication<Application>().getString(R.string.connected_language, lang)
-                _statusColor.value =
-                    Color(ContextCompat.getColor(getApplication(), R.color.status_success))
+                _statusMessage.value = getApplication<Application>().getString(R.string.connected_language, lang)
+                _statusColor.value = Color.Green
 
             } catch (_: TimeoutCancellationException) {
-                // Timeout → show error
-                _statusMessage.value =
-                    getApplication<Application>().getString(R.string.switch_timeout, bisIndex.toString())
-                _statusColor.value =
-                    Color(ContextCompat.getColor(getApplication(), R.color.status_error))
+                _statusMessage.value = getApplication<Application>().getString(R.string.switch_timeout, bisIndex.toString())
+                _statusColor.value = Color.Red
 
             } catch (e: Exception) {
-                // General failure
-                loge("AuracastViewModel: BIS channel selection failed", e)
-                _statusMessage.value =
-                    getApplication<Application>().getString(R.string.switch_failed)
-                _statusColor.value =
-                    Color(ContextCompat.getColor(getApplication(), R.color.status_error))
+                loge("BIS channel selection failed", e)
+                _statusMessage.value = getApplication<Application>().getString(R.string.switch_failed)
+                _statusColor.value = Color.Red
             }
         }
     }
 
-    /**
-     * Called when the ViewModel is destroyed.
-     * Ensures scanning is stopped to release resources.
-     */
+    /** Stop scanner when ViewModel is cleared */
     override fun onCleared() {
         super.onCleared()
         try {
             periodicScanner.stopScanningAuracastEa()
+            logi("Scanner stopped on ViewModel cleared")
         } catch (e: Exception) {
-            loge("AuracastViewModel: Error stopping scanner on ViewModel cleared", e)
+            loge("Error stopping scanner on ViewModel cleared", e)
         }
     }
 }
