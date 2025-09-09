@@ -18,7 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.android.broadcastassistant.audio.FakeAuracastBroadcasterSource
+import com.android.broadcastassistant.audio.PreviewAuracastDevice
 import com.android.broadcastassistant.data.AuracastDevice
 import com.android.broadcastassistant.data.CommandLog
 import com.android.broadcastassistant.ui.theme.AppTextPrimary
@@ -184,7 +184,7 @@ fun LanguageSelectionScreen(
 @Composable
 @Preview(showBackground = true)
 fun LanguageSelectionScreenPreview() {
-    val fakeDevice = FakeAuracastBroadcasterSource.fakeBroadcasters().first()
+    val fakeDevice = PreviewAuracastDevice.fakeBroadcasters().first()
     LanguageSelectionScreen(
         device = fakeDevice,
         onBisSelected = {}, // No-op for preview

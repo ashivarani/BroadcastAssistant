@@ -13,7 +13,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Color
-import com.android.broadcastassistant.audio.FakeAuracastBroadcasterSource
+import com.android.broadcastassistant.audio.PreviewAuracastDevice
 import com.android.broadcastassistant.data.AuracastDevice
 import com.android.broadcastassistant.ui.theme.AppTextPrimary
 import com.android.broadcastassistant.ui.theme.ButtonTextWhite
@@ -202,7 +202,7 @@ fun AuracastDeviceCardSimple(
 @Preview(showBackground = true, apiLevel = 34)
 @Composable
 fun AuracastScreenPreview() {
-    val dummyDevices = FakeAuracastBroadcasterSource.fakeBroadcasters()
+    val dummyDevices = PreviewAuracastDevice.fakeBroadcasters()
     logd("AuracastScreenPreview: Rendering preview with ${dummyDevices.size} devices")
 
     AuracastScreen(
