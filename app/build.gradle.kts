@@ -31,7 +31,7 @@ android {
          */
         val versionMajor = 2
         val versionMinor = 2
-        val versionPatch = 2
+        val versionPatch = 3
 
         versionCode = (versionMajor * 10000) + (versionMinor * 100) + versionPatch
         versionName = "$versionMajor.$versionMinor.$versionPatch"
@@ -129,6 +129,11 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.androidx.core)
     implementation(libs.androidx.core.ktx)
+
+    // Preferences DataStore
+    implementation("androidx.datastore:datastore-preferences:1.1.7")
+    // Optional: Kotlin coroutines support for DataStore
+    implementation("androidx.datastore:datastore-preferences-core:1.1.7")
 }
 
 /**

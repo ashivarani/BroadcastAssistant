@@ -4,6 +4,9 @@ import android.app.Application
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.Color
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.android.broadcastassistant.R
@@ -19,9 +22,28 @@ import com.android.broadcastassistant.util.logw
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
+// Extension property for DataStore
+private val Application.dataStore by preferencesDataStore(name = "auracast_prefs")
+
+// Key to store the selected BIS index
+private val SELECTED_BIS_KEY = intPreferencesKey("selected_bis_index")
+
+/**
+ * ViewModel for Auracast Assistant app.
+ *
+ * Responsibilities:
+ * - Manage BLE scanning for Auracast broadcasters
+ * - Maintain device list & scanning state
+ * - Handle BIS selection (single BIS only)
+ * - Log commands for UI
+ * - Persist last selected BIS for UI highlight (no auto-reconnect)
+ *
+ * @param application Application context
+ */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 class AuracastViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -46,10 +68,11 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
 
     /** Status text color for UI */
     private val _statusColor = MutableStateFlow(Color.Black)
+
     /** Controller for BASS functionality */
     private val bassGattManager = BassGattManager(getApplication<Application>().applicationContext)
 
-    /** Manager handling BIS channel selection logic, now logging commands */
+    /** Manager handling BIS selection logic with command logging */
     private val bisSelectionManager = BisSelectionManager(
         onDeviceUpdate = { updatedDevices ->
             logd("Devices updated → ${updatedDevices.size} devices")
@@ -69,12 +92,26 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
     private val periodicScanner = AuracastEaScanner(getApplication<Application>().applicationContext)
 
     init {
-        // Collect scanned devices immediately
         viewModelScope.launch {
             try {
                 logi("Initializing AuracastEaScanner")
-                periodicScanner.broadcasters.collectLatest { scannedDevices ->
-                    _devices.value = scannedDevices
+
+                // Load last selected BIS index for UI highlight
+                val savedBisIndex = try {
+                    getApplication<Application>().dataStore.data
+                        .map { prefs -> prefs[SELECTED_BIS_KEY] ?: -1 }
+                        .first()
+                } catch (e: Exception) {
+                    loge("Failed to read saved BIS index", e)
+                    -1
+                }
+
+                // Collect scanned devices
+                periodicScanner.broadcasters.collect { scannedDevices ->
+                    _devices.value = scannedDevices.map { device ->
+                        if (savedBisIndex != -1) device.copy(selectedBisIndex = savedBisIndex)
+                        else device
+                    }
                     logd("Collected ${scannedDevices.size} scanned devices")
                 }
             } catch (e: Exception) {
@@ -94,7 +131,6 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
     fun startScan() {
         try {
             logd("startScan() called")
-
             if (!_permissionsGranted.value) {
                 _statusMessage.value = getApplication<Application>().getString(R.string.scan_permissions_required)
                 _statusColor.value = Color.Red
@@ -108,8 +144,7 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
             periodicScanner.clearDevices()
             periodicScanner.startScanningAuracastEa()
             _isScanning.value = true
-            _statusMessage.value =  getApplication<Application>().getString(
-                R.string.start_scan)
+            _statusMessage.value = getApplication<Application>().getString(R.string.start_scan)
             _statusColor.value = Color.Blue
             logi("Scan started successfully")
         } catch (e: Exception) {
@@ -123,12 +158,10 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
     fun stopScan() {
         try {
             if (!_isScanning.value) return
-
             periodicScanner.stopScanningAuracastEa()
             _isScanning.value = false
             val count = _devices.value.size
-            _statusMessage.value = getApplication<Application>().getString(
-                R.string.scan_stopped_real, count)
+            _statusMessage.value = getApplication<Application>().getString(R.string.scan_stopped_real, count)
             _statusColor.value = Color.Black
             logi("Scan stopped with $count devices")
         } catch (e: Exception) {
@@ -150,6 +183,7 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
 
     /**
      * Select a BIS channel for a device and log command messages.
+     * Stores the selected BIS index in DataStore for UI highlight only.
      *
      * @param device AuracastDevice to select BIS for
      * @param bisIndex Index of BIS channel
@@ -166,6 +200,11 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
 
                 // Perform BIS selection
                 bisSelectionManager.selectBisChannel(device, bisIndex)
+
+                // Save selected BIS index for UI highlight only
+                getApplication<Application>().dataStore.edit { prefs ->
+                    prefs[SELECTED_BIS_KEY] = bisIndex
+                }
 
                 _statusMessage.value = getApplication<Application>().getString(R.string.connected_language, lang)
                 _statusColor.value = Color.Green

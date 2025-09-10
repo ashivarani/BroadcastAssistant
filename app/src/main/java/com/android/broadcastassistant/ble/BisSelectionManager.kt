@@ -7,7 +7,6 @@ import com.android.broadcastassistant.audio.BassGattManager
 import com.android.broadcastassistant.data.AuracastDevice
 import com.android.broadcastassistant.data.BassCommand
 import com.android.broadcastassistant.data.CommandLog
-import com.android.broadcastassistant.util.PermissionHelper
 import com.android.broadcastassistant.util.logd
 import com.android.broadcastassistant.util.loge
 import com.android.broadcastassistant.util.logi
@@ -16,40 +15,42 @@ import com.android.broadcastassistant.util.logw
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 /**
- * Manages BIS (Broadcast Isochronous Stream) selection and BASS Control Point switching.
+ * Manages BIS (Broadcast Isochronous Stream) selection for Auracast devices.
  *
  * Responsibilities:
- * 1. Selects one or multiple BIS channels for a given AuracastDevice.
- * 2. Builds BASS Control Point "switch BIS" commands via [BassControlPointBuilder].
- * 3. Sends commands to devices using [BassGattManager].
- * 4. Updates UI via [onDeviceUpdate] and logs actions via [onCommandLog].
- * 5. Handles missing permissions and runtime errors.
+ * 1. Selects one or multiple BIS channels for a given [AuracastDevice].
+ * 2. Builds BASS Control Point "switch BIS" commands using [BassControlPointBuilder].
+ * 3. Sends commands via [BassGattManager].
+ * 4. Updates UI state and logs actions using [onDeviceUpdate] and [onCommandLog].
+ * 5. Includes retry mechanism for transient failures.
+ *
+ * Note:
+ * - Currently supports single-BIS selection only (multi-BIS is future-proofed but not used).
+ * - Protected broadcasts, PA Sync, or BIG encryption are not supported in this version.
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 class BisSelectionManager(
-    private val onDeviceUpdate: (List<AuracastDevice>) -> Unit, // UI callback to refresh device list
-    private val getCurrentDevices: () -> List<AuracastDevice>,   // Get latest device list
-    private val bassGattManager: BassGattManager,               // GATT manager for BASS commands
-    private val onCommandLog: (CommandLog) -> Unit              // Push command logs to UI
+    private val onDeviceUpdate: (List<AuracastDevice>) -> Unit,
+    private val getCurrentDevices: () -> List<AuracastDevice>,
+    private val bassGattManager: BassGattManager,
+    private val onCommandLog: (CommandLog) -> Unit
 ) {
 
-    /** Called when runtime permissions are missing. Set by UI layer */
-    var onMissingPermissions: ((Array<String>) -> Unit)? = null
-
     /**
-     * Select multiple BIS indexes for a device and trigger BASS Control Point switch.
+     * Select multiple BIS indexes for a device and trigger a BASS Control Point switch.
      *
-     * @param device AuracastDevice to control
-     * @param bisIndexes List of BIS indexes to select
+     * @param device The [AuracastDevice] to control.
+     * @param bisIndexes List of BIS indexes to select. Currently only the first index is applied for single-BIS.
      */
     fun selectBisChannel(device: AuracastDevice, bisIndexes: List<Int>) {
         try {
             // Filter selected BIS channels based on requested indexes
             val selectedChannels = device.bisChannels.filter { bisIndexes.contains(it.index) }
 
-            // Abort if requested indexes are not available on this device
+            // Abort if requested indexes are not available
             if (selectedChannels.isEmpty()) {
                 logw("selectBisChannel: BIS indexes $bisIndexes not found for ${device.address}")
                 onCommandLog(CommandLog("BIS indexes $bisIndexes not found for ${device.name}"))
@@ -59,7 +60,7 @@ class BisSelectionManager(
             logi("selectBisChannel: Selecting BIS indexes=$bisIndexes for ${device.name}")
             selectedChannels.forEach { logv("selectBisChannel: Using BIS → ${it.toDebugString()}") }
 
-            // Push a log entry to UI
+            // Push log entry to UI
             onCommandLog(CommandLog("Selecting BIS indexes $bisIndexes for ${device.name}"))
 
             // Update device state in UI with first selected BIS index
@@ -75,41 +76,43 @@ class BisSelectionManager(
                 return
             }
 
-            // Send BIS switch command asynchronously
+            // Send BIS switch command asynchronously with retry logic
             CoroutineScope(Dispatchers.IO).launch {
-                runCatching {
-                    // Build BASS Control Point "switch BIS" command
-                    val cpData = BassControlPointBuilder.buildSwitchCommand(
-                        sourceId = device.sourceId,
-                        bisChannels = selectedChannels,
-                        broadcastId = device.broadcastId,
-                        broadcastCode = device.broadcastCode
-                    )
-                    logv("selectBisChannel: Built CP data (len=${cpData.size}) for ${device.address}")
+                var attempt = 0
+                val maxRetries = 2
+                while (attempt <= maxRetries) {
+                    try {
+                        // Build BASS Control Point "switch BIS" command
+                        val cpData = BassControlPointBuilder.buildSwitchCommand(
+                            sourceId = device.sourceId,
+                            bisChannels = selectedChannels,
+                            broadcastId = device.broadcastId,
+                            broadcastCode = device.broadcastCode
+                        )
+                        logv("selectBisChannel: Built CP data (len=${cpData.size}) for ${device.address}")
 
-                    // Prepare command for GATT manager
-                    val command = BassCommand(
-                        deviceAddress = device.address,
-                        controlPointData = cpData,
-                        autoDisconnect = false
-                    )
+                        // Prepare command for GATT manager
+                        val command = BassCommand(
+                            deviceAddress = device.address,
+                            controlPointData = cpData,
+                            autoDisconnect = false
+                        )
 
-                    // Send command to device
-                    bassGattManager.sendControlPoint(command)
-                    logi("selectBisChannel: BIS switch command sent successfully to ${device.address}")
-                    onCommandLog(CommandLog("BIS switch command sent to ${device.name}"))
+                        // Send command to device
+                        bassGattManager.sendControlPoint(command)
+                        logi("selectBisChannel: BIS switch command sent successfully to ${device.address}")
+                        onCommandLog(CommandLog("BIS switch command sent to ${device.name}"))
+                        break // success, exit retry loop
 
-                }.onFailure { e ->
-                    // Handle permission errors
-                    when (e) {
-                        is SecurityException -> {
-                            loge("selectBisChannel: Missing BLUETOOTH_CONNECT permission", e)
-                            onMissingPermissions?.invoke(PermissionHelper.getRequiredPermissions())
-                            onCommandLog(CommandLog("Failed to send BIS switch — missing permission for ${device.name}"))
-                        }
-                        else -> {
-                            loge("selectBisChannel: Failed to build/send BIS switch command for ${device.address}", e)
+                    } catch (e: Exception) {
+                        attempt++
+                        if (attempt > maxRetries) {
+                            loge("selectBisChannel: Failed after $maxRetries attempts for ${device.address}", e)
                             onCommandLog(CommandLog("Failed to send BIS switch for ${device.name}: ${e.message}"))
+                        } else {
+                            logw("selectBisChannel: Retry $attempt for ${device.address}")
+                            onCommandLog(CommandLog("Retrying BIS switch for ${device.name} (attempt $attempt)"))
+                            delay(1500L)
                         }
                     }
                 }
@@ -121,7 +124,12 @@ class BisSelectionManager(
         }
     }
 
-    /** Convenience overload to select a single BIS index */
+    /**
+     * Convenience method to select a single BIS index.
+     *
+     * @param device The [AuracastDevice] to control.
+     * @param bisIndex Single BIS index to select.
+     */
     fun selectBisChannel(device: AuracastDevice, bisIndex: Int) {
         logd("selectBisChannel(single): Request to select BIS index=$bisIndex for ${device.address}")
         selectBisChannel(device, listOf(bisIndex))
