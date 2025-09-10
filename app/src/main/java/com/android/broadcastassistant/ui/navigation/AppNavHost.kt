@@ -12,7 +12,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.android.broadcastassistant.ui.screen.AuracastScreen
-import com.android.broadcastassistant.ui.screen.LanguageSelectionScreen
+import com.android.broadcastassistant.ui.screen.BisChannelScreen
 import com.android.broadcastassistant.util.logd
 import com.android.broadcastassistant.util.loge
 import com.android.broadcastassistant.viewmodel.AuracastViewModel
@@ -57,7 +57,7 @@ fun AppNavHost(viewModel: AuracastViewModel = viewModel()) {
             )
         }
 
-        // Language selection screen for a selected device
+        // Bis Channel Screen for a selected device
         composable(
             "language_selection/{address}",
             arguments = listOf(navArgument("address") { type = NavType.StringType })
@@ -67,7 +67,7 @@ fun AppNavHost(viewModel: AuracastViewModel = viewModel()) {
             // Safe lookup for the device by address
             val device = devices.find { it.address == address }
             if (device != null) {
-                LanguageSelectionScreen(
+                BisChannelScreen(
                     device = device,
                     onBisSelected = { bisIndex ->
                         try {
