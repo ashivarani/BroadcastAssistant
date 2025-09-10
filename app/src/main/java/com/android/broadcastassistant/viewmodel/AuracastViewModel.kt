@@ -4,27 +4,16 @@ import android.app.Application
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.Color
-import androidx.datastore.preferences.core.intPreferencesKey
-import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.*
 import com.android.broadcastassistant.R
-import com.android.broadcastassistant.audio.BassGattManager
-import com.android.broadcastassistant.ble.AuracastEaScanner
-import com.android.broadcastassistant.ble.BisSelectionManager
-import com.android.broadcastassistant.data.AuracastDevice
-import com.android.broadcastassistant.data.CommandLog
-import com.android.broadcastassistant.util.logd
-import com.android.broadcastassistant.util.loge
-import com.android.broadcastassistant.util.logi
-import com.android.broadcastassistant.util.logw
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
+import com.android.broadcastassistant.audio.*
+import com.android.broadcastassistant.ble.*
+import com.android.broadcastassistant.data.*
+import com.android.broadcastassistant.util.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 
 // Extension property for DataStore
 private val Application.dataStore by preferencesDataStore(name = "auracast_prefs")
@@ -89,7 +78,7 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
     )
 
     /** Scanner for Auracast Extended Advertising packets */
-    private val periodicScanner = AuracastEaScanner(getApplication<Application>().applicationContext)
+    private val scanner = AuracastEaScanner(getApplication<Application>().applicationContext)
 
     init {
         viewModelScope.launch {
@@ -107,7 +96,7 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
                 }
 
                 // Collect scanned devices
-                periodicScanner.broadcasters.collect { scannedDevices ->
+                scanner.broadcasters.collect { scannedDevices ->
                     _devices.value = scannedDevices.map { device ->
                         if (savedBisIndex != -1) device.copy(selectedBisIndex = savedBisIndex)
                         else device
@@ -141,8 +130,8 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
             if (_isScanning.value) return
 
             _devices.value = emptyList()
-            periodicScanner.clearDevices()
-            periodicScanner.startScanningAuracastEa()
+            scanner.clearDevices()
+            scanner.startScanningAuracastEa()
             _isScanning.value = true
             _statusMessage.value = getApplication<Application>().getString(R.string.start_scan)
             _statusColor.value = Color.Blue
@@ -158,7 +147,7 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
     fun stopScan() {
         try {
             if (!_isScanning.value) return
-            periodicScanner.stopScanningAuracastEa()
+            scanner.stopScanningAuracastEa()
             _isScanning.value = false
             val count = _devices.value.size
             _statusMessage.value = getApplication<Application>().getString(R.string.scan_stopped_real, count)
@@ -225,7 +214,7 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
     override fun onCleared() {
         super.onCleared()
         try {
-            periodicScanner.stopScanningAuracastEa()
+            scanner.stopScanningAuracastEa()
             logi("Scanner stopped on ViewModel cleared")
         } catch (e: Exception) {
             loge("Error stopping scanner on ViewModel cleared", e)

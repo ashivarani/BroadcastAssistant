@@ -1,28 +1,16 @@
 package com.android.broadcastassistant.ble
 
 import android.Manifest
-import android.bluetooth.BluetoothManager
-import android.bluetooth.le.BluetoothLeScanner
-import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
-import android.bluetooth.le.ScanResult
-import android.bluetooth.le.ScanSettings
-import android.content.Context
+import android.bluetooth.*
+import android.bluetooth.le.*
+import android.content.*
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
-import com.android.broadcastassistant.data.AuracastDevice
-import com.android.broadcastassistant.util.PermissionHelper
-import com.android.broadcastassistant.util.logd
-import com.android.broadcastassistant.util.loge
-import com.android.broadcastassistant.util.logi
-import com.android.broadcastassistant.util.logw
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import com.android.broadcastassistant.data.*
+import com.android.broadcastassistant.util.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 
 /**
  * Auracast Extended Advertising (EA) scanner.

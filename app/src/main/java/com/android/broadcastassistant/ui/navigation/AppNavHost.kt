@@ -2,19 +2,12 @@ package com.android.broadcastassistant.ui.navigation
 
 import android.os.Build
 import androidx.annotation.RequiresApi
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
-import com.android.broadcastassistant.ui.screen.AuracastScreen
-import com.android.broadcastassistant.ui.screen.BisChannelScreen
-import com.android.broadcastassistant.util.logd
-import com.android.broadcastassistant.util.loge
+import androidx.navigation.*
+import androidx.navigation.compose.*
+import com.android.broadcastassistant.ui.screen.*
+import com.android.broadcastassistant.util.*
 import com.android.broadcastassistant.viewmodel.AuracastViewModel
 
 /**

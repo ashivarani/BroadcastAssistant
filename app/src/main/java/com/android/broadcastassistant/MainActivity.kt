@@ -1,5 +1,4 @@
 package com.android.broadcastassistant
-
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -10,10 +9,7 @@ import androidx.annotation.RequiresApi
 import com.android.broadcastassistant.ui.navigation.AppNavHost
 import com.android.broadcastassistant.ui.theme.BroadcastAssistantTheme
 import com.android.broadcastassistant.util.PermissionHelper
-import com.android.broadcastassistant.util.logd
-import com.android.broadcastassistant.util.logi
-import com.android.broadcastassistant.util.logw
-import com.android.broadcastassistant.util.loge
+import com.android.broadcastassistant.util.*
 import com.android.broadcastassistant.viewmodel.AuracastViewModel
 
 /**
