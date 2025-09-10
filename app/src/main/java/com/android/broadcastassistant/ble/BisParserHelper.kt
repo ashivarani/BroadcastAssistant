@@ -1,13 +1,9 @@
 package com.android.broadcastassistant.ble
 
 import android.bluetooth.le.ScanRecord
-import com.android.broadcastassistant.data.AuracastDevice
-import com.android.broadcastassistant.data.BisChannel
-import com.android.broadcastassistant.util.logd
-import com.android.broadcastassistant.util.loge
-import com.android.broadcastassistant.util.logw
-import androidx.core.util.isEmpty
-import androidx.core.util.size
+import com.android.broadcastassistant.data.*
+import com.android.broadcastassistant.util.*
+import androidx.core.util.*
 
 /**
  * Helper object for parsing BIS (Broadcast Isochronous Stream) data

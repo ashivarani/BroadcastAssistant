@@ -1,9 +1,7 @@
 package com.android.broadcastassistant.audio
 
 import com.android.broadcastassistant.data.BisChannel
-import com.android.broadcastassistant.util.logd
-import com.android.broadcastassistant.util.loge
-import com.android.broadcastassistant.util.logv
+import com.android.broadcastassistant.util.*
 
 /**
  * Utility object for building BASS (Broadcast Audio Scan Service)

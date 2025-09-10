@@ -1,27 +1,17 @@
 package com.android.broadcastassistant.audio
 
 import android.Manifest
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothGatt
-import android.bluetooth.BluetoothGattCallback
-import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothGattService
-import android.bluetooth.BluetoothManager
-import android.content.Context
+import android.bluetooth.*
+import android.content.*
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
-import com.android.broadcastassistant.data.BassCommand
-import com.android.broadcastassistant.util.UuidUtils
-import com.android.broadcastassistant.util.logd
-import com.android.broadcastassistant.util.loge
-import com.android.broadcastassistant.util.logi
-import com.android.broadcastassistant.util.logw
-import kotlinx.coroutines.suspendCancellableCoroutine
-import java.util.UUID
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+import com.android.broadcastassistant.data.*
+import com.android.broadcastassistant.util.*
+import kotlinx.coroutines.*
+import java.util.*
+import kotlin.coroutines.*
 
 /**
  * Manager for Broadcast Audio Scan Service (BASS) GATT interactions.
