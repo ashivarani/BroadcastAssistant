@@ -133,7 +133,7 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
             scanner.clearDevices()
             scanner.startScanningAuracastEa()
             _isScanning.value = true
-            _statusMessage.value = getApplication<Application>().getString(R.string.start_scan)
+            _statusMessage.value = getApplication<Application>().getString(R.string.scan_starting)
             _statusColor.value = Color.Blue
             logi("Scan started successfully")
         } catch (e: Exception) {
@@ -150,7 +150,7 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
             scanner.stopScanningAuracastEa()
             _isScanning.value = false
             val count = _devices.value.size
-            _statusMessage.value = getApplication<Application>().getString(R.string.scan_stopped_real, count)
+            _statusMessage.value = getApplication<Application>().getString(R.string.scan_stopped, count)
             _statusColor.value = Color.Black
             logi("Scan stopped with $count devices")
         } catch (e: Exception) {
