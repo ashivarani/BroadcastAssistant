@@ -126,17 +126,6 @@ fun AuracastScreen(
                         }
                     }
                 }
-            } else if (isScanning) {
-                // If scanning and no devices yet, show placeholder message
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Scanning for Auracast devices...",
-                        style = MaterialTheme.typography.bodyMedium.copy(color = AppTextPrimary)
-                    )
-                }
             }
         }
     }

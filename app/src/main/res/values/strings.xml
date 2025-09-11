@@ -4,9 +4,7 @@
 
         <!-- Scanning -->
         <string name="scan_starting">Scanning for Auracast devices… </string>
-        <string name="scan_started_fake">Emulator fake scan started</string>
-        <string name="scan_stopped_fake">Fake scan stopped — %1$d devices shown</string>
-        <string name="scan_stopped_real">Scan stopped — %1$d devices found</string>
+        <string name="scan_stopped">Scan stopped — %1$d devices found</string>
         <string name="scan_permissions_required">Please grant Bluetooth permissions to scan.</string>
 
         <!-- BIS Selection -->
@@ -21,7 +19,5 @@
         <string name="no_bis_channels">No BIS channels available for this device.</string>
         <string name="device_label">Device: %1$s</string>
         <string name="back">Back</string>
-        <string name="start_scan">Start Scanning</string>
-        <string name="stop_scan">Stop Scanning</string>
 
 </resources>
