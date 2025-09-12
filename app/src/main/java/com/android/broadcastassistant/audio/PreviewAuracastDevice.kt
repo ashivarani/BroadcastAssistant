@@ -8,7 +8,8 @@ import kotlin.random.Random
  * Generates fake Auracast broadcasters and BIS channels for Compose previews
  * or testing in environments where BLE scanning is not available.
  *
- * This is purely for UI preview/testing purposes. No scanning or runtime updates.
+ * All steps are logged using the centralized logging utility.
+ * No scanning or runtime updates occur; purely for UI preview/testing.
  */
 class PreviewAuracastDevice {
 
@@ -18,11 +19,11 @@ class PreviewAuracastDevice {
          * Generates a static list of fake Auracast devices.
          *
          * Each device will contain:
-         * - Randomly selected languages (2–3 per device)
-         * - Random audio roles ("Main", "Commentary", "Effects") for each BIS channel
-         * - Random stream configuration from a set of supported configs
-         * - Random RSSI values (-90 to -30)
-         * - Random broadcast ID
+         * - Stereo broadcaster (Left + Right channels)
+         * - Multilingual broadcaster (3 different language BIS channels)
+         * - One randomized broadcaster for extra variation
+         *
+         * This ensures the preview UI always has both single-BIS and multi-BIS cases.
          *
          * @return List of fake [AuracastDevice] objects.
          */
@@ -30,59 +31,61 @@ class PreviewAuracastDevice {
             return try {
                 logd("fakeBroadcasters: Entered")
 
-                // List of possible spoken languages for BIS channels
-                val languages = listOf(
-                    "English",
-                    "Telugu",
-                    "Kannada",
-                    "Tamil",
-                    "Hindi"
-                )
+                val languages = listOf("English", "Telugu", "Kannada", "Tamil", "Hindi")
+                val audioRoles = listOf("Main", "Commentary", "Effects")
+                val streamConfigs = listOf("48kHz", "44.1kHz", "32kHz", "24kHz", "16kHz")
 
-                // List of possible audio roles for BIS channels
-                val audioRoles = listOf(
-                    "Main",
-                    "Commentary",
-                    "Effects"
-                )
+                val devices = listOf(
 
-                // List of possible stream configurations
-                val streamConfigs = listOf(
-                    "48kHz",
-                    "44.1kHz",
-                    "32kHz",
-                    "24kHz",
-                    "16kHz"
-                )
-
-                // Generate 3 fake Auracast devices
-                val devices = (1..3).map { index ->
-
-                    // Pick 2–3 random languages per device
-                    val selectedLangs = languages.shuffled().take(Random.nextInt(2, 4))
-
-                    // Create BIS channels for each selected language
-                    val bisChannels = selectedLangs.mapIndexed { i, lang ->
-                        BisChannel(
-                            index = i,                        // BIS index (0-based)
-                            language = lang,                  // Language of this channel
-                            audioRole = audioRoles.random(), // Random audio role
-                            streamConfig = streamConfigs.random() // Random stream configuration
-                        )
-                    }
-
-                    // Create a fake Auracast device
+                    // Device 1: Stereo (always has Left + Right channels)
                     AuracastDevice(
-                        name = "Broadcaster $index",                          // Device name
-                        address = "00:11:22:33:44:${index.toString().padStart(2, '0')}", // MAC-like address
-                        rssi = Random.nextInt(-90, -30),                     // Random RSSI
-                        bisChannels = bisChannels,                           // List of BIS channels
-                        broadcastId = Random.nextInt(1000, 9999),            // Random broadcast ID
-                        broadcastCode = null                                  // No broadcast code
-                    ).also { logv("fakeBroadcasters: Created $it") }
-                }
+                        name = "Broadcaster 1 (Stereo)",
+                        address = "00:11:22:33:44:01",
+                        rssi = Random.nextInt(-80, -40),
+                        bisChannels = listOf(
+                            BisChannel(0, "English", "Left", "48kHz"),
+                            BisChannel(1, "English", "Right", "48kHz")
+                        ),
+                        broadcastId = 1234,
+                        broadcastCode = null,
+                        selectedBisIndexes = emptyList()
+                    ).also { logv("fakeBroadcasters: Created device 1 -> $it") },
 
-                logi("fakeBroadcasters: Generated ${devices.size} fake devices successfully")
+                    // Device 2: Multilingual (3 BIS channels)
+                    AuracastDevice(
+                        name = "Broadcaster 2 (Multilingual)",
+                        address = "00:11:22:33:44:02",
+                        rssi = Random.nextInt(-85, -35),
+                        bisChannels = listOf(
+                            BisChannel(0, "English", "Main", "44.1kHz"),
+                            BisChannel(1, "Telugu", "Main", "44.1kHz"),
+                            BisChannel(2, "Hindi", "Commentary", "44.1kHz")
+                        ),
+                        broadcastId = 5678,
+                        broadcastCode = null,
+                        selectedBisIndexes = emptyList()
+                    ).also { logv("fakeBroadcasters: Created device 2 -> $it") },
+
+                    // Device 3: Randomized channels (2–3 BIS channels)
+                    AuracastDevice(
+                        name = "Broadcaster 3 (Random)",
+                        address = "00:11:22:33:44:03",
+                        rssi = Random.nextInt(-90, -30),
+                        bisChannels = (languages.shuffled().take(Random.nextInt(2, 4))).mapIndexed { i, lang ->
+                            BisChannel(
+                                index = i,
+                                language = lang,
+                                audioRole = audioRoles.random(),
+                                streamConfig = streamConfigs.random()
+                            )
+                        },
+                        broadcastId = 9012,
+                        broadcastCode = null,
+                        selectedBisIndexes = emptyList()
+                    ).also { logv("fakeBroadcasters: Created device 3 -> $it") }
+                )
+
+                logi("fakeBroadcasters: Successfully generated ${devices.size} fake devices")
                 devices
 
             } catch (e: Exception) {

@@ -2,127 +2,112 @@ package com.android.broadcastassistant.ble
 
 import android.os.Build
 import androidx.annotation.RequiresApi
-import com.android.broadcastassistant.audio.*
+import com.android.broadcastassistant.audio.BassControlPointBuilder
+import com.android.broadcastassistant.audio.BassControlPointExtensions
+import com.android.broadcastassistant.audio.BassGattManager
 import com.android.broadcastassistant.data.*
-import com.android.broadcastassistant.util.*
-import kotlinx.coroutines.*
-
+import com.android.broadcastassistant.util.loge
+import com.android.broadcastassistant.util.logw
+import com.android.broadcastassistant.util.logi
 
 /**
- * Manages BIS (Broadcast Isochronous Stream) selection for Auracast devices.
+ * Manages BIS channel selection for Auracast devices.
  *
  * Responsibilities:
- * 1. Selects one or multiple BIS channels for a given [AuracastDevice].
- * 2. Builds BASS Control Point "switch BIS" commands using [BassControlPointBuilder].
- * 3. Sends commands via [BassGattManager].
- * 4. Updates UI state and logs actions using [onDeviceUpdate] and [onCommandLog].
- * 5. Includes retry mechanism for transient failures.
- *
- * Note:
- * - Currently supports single-BIS selection only (multi-BIS is future-proofed but not used).
- * - Protected broadcasts, PA Sync, or BIG encryption are not supported in this version.
+ * - Selects one or multiple BIS indexes safely.
+ * - Applies language-based fallback (single BIS per language).
+ * - Sends 0x01 Select BIS for initial join or 0x03 Modify Source for already joined devices.
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 class BisSelectionManager(
-    private val onDeviceUpdate: (List<AuracastDevice>) -> Unit,
-    private val getCurrentDevices: () -> List<AuracastDevice>,
     private val bassGattManager: BassGattManager,
-    private val onCommandLog: (CommandLog) -> Unit
 ) {
 
     /**
-     * Select multiple BIS indexes for a device and trigger a BASS Control Point switch.
+     * Selects BIS channels for a device.
      *
-     * @param device The [AuracastDevice] to control.
-     * @param bisIndexes List of BIS indexes to select. Currently only the first index is applied for single-BIS.
+     * @param device The target [AuracastDevice].
+     * @param bisIndexes List of requested BIS indexes to select.
+     * @return [BisSelectionResult.Success] on success, or [BisSelectionResult.Failure] on error.
      */
-    fun selectBisChannel(device: AuracastDevice, bisIndexes: List<Int>) {
+    suspend fun selectBisChannels(
+        device: AuracastDevice,
+        bisIndexes: List<Int>
+    ): BisSelectionResult {
         try {
-            // Filter selected BIS channels based on requested indexes
-            val selectedChannels = device.bisChannels.filter { bisIndexes.contains(it.index) }
+            // Reject encrypted/private broadcasts
+            if (device.broadcastCode != null) {
+                val reason = "Encrypted/private broadcast not supported: ${device.address}"
+                logw(reason)
+                return BisSelectionResult.Failure(device, reason)
+            }
 
-            // Abort if requested indexes are not available
+            // Filter selected BIS channels
+            val selectedChannels = device.bisChannels.filter { it.index in bisIndexes }
             if (selectedChannels.isEmpty()) {
-                logw("selectBisChannel: BIS indexes $bisIndexes not found for ${device.address}")
-                onCommandLog(CommandLog("BIS indexes $bisIndexes not found for ${device.name}"))
-                return
+                val reason = "BIS indexes $bisIndexes not found for ${device.address}"
+                logw(reason)
+                return BisSelectionResult.Failure(device, reason)
             }
 
-            logi("selectBisChannel: Selecting BIS indexes=$bisIndexes for ${device.name}")
-            selectedChannels.forEach { logv("selectBisChannel: Using BIS → ${it.toDebugString()}") }
-
-            // Push log entry to UI
-            onCommandLog(CommandLog("Selecting BIS indexes $bisIndexes for ${device.name}"))
-
-            // Update device state in UI with first selected BIS index
-            val updatedDevices = getCurrentDevices().map { d ->
-                if (d.address == device.address) d.copy(selectedBisIndex = bisIndexes.first()) else d
-            }
-            onDeviceUpdate(updatedDevices)
-
-            // Ensure device has required identifiers
-            if (device.broadcastId == null || device.sourceId == null) {
-                loge("selectBisChannel: Missing broadcastId or sourceId for ${device.address}")
-                onCommandLog(CommandLog("Cannot switch BIS — missing broadcastId or sourceId for ${device.name}"))
-                return
+            // Always fallback to single BIS per language
+            val uniqueLanguages = mutableSetOf<String>()
+            val channelsToSend = selectedChannels.filter { bis ->
+                val lang = bis.language.ifEmpty { "Unknown" }
+                if (!uniqueLanguages.contains(lang)) {
+                    uniqueLanguages.add(lang)
+                    true
+                } else false
             }
 
-            // Send BIS switch command asynchronously with retry logic
-            CoroutineScope(Dispatchers.IO).launch {
-                var attempt = 0
-                val maxRetries = 2
-                while (attempt <= maxRetries) {
-                    try {
-                        // Build BASS Control Point "switch BIS" command
-                        val cpData = BassControlPointBuilder.buildSwitchCommand(
-                            sourceId = device.sourceId,
-                            bisChannels = selectedChannels,
-                            broadcastId = device.broadcastId,
-                            broadcastCode = device.broadcastCode
-                        )
-                        logv("selectBisChannel: Built CP data (len=${cpData.size}) for ${device.address}")
+            if (channelsToSend.isEmpty()) {
+                return BisSelectionResult.Failure(device, "No BIS channels available after fallback")
+            }
 
-                        // Prepare command for GATT manager
-                        val command = BassCommand(
-                            deviceAddress = device.address,
-                            controlPointData = cpData,
-                            autoDisconnect = false
-                        )
+            // Determine whether this is the first join
+            val firstJoin = device.selectedBisIndexes.isEmpty()
 
-                        // Send command to device
-                        bassGattManager.sendControlPoint(command)
-                        logi("selectBisChannel: BIS switch command sent successfully to ${device.address}")
-                        onCommandLog(CommandLog("BIS switch command sent to ${device.name}"))
-                        break // success, exit retry loop
+            // Build Control Point command
+            val cpData = if (firstJoin) {
+                BassControlPointExtensions.buildSelectBisCommand(
+                    sourceId = device.sourceId
+                        ?: return BisSelectionResult.Failure(device, "Missing sourceId"),
+                    bisChannels = channelsToSend
+                )
+            } else {
+                BassControlPointBuilder.buildSwitchCommand(
+                    sourceId = device.sourceId
+                        ?: return BisSelectionResult.Failure(device, "Missing sourceId"),
+                    bisChannels = channelsToSend,
+                    broadcastId = device.broadcastId
+                        ?: return BisSelectionResult.Failure(device, "Missing broadcastId")
+                )
+            }
 
-                    } catch (e: Exception) {
-                        attempt++
-                        if (attempt > maxRetries) {
-                            loge("selectBisChannel: Failed after $maxRetries attempts for ${device.address}", e)
-                            onCommandLog(CommandLog("Failed to send BIS switch for ${device.name}: ${e.message}"))
-                        } else {
-                            logw("selectBisChannel: Retry $attempt for ${device.address}")
-                            onCommandLog(CommandLog("Retrying BIS switch for ${device.name} (attempt $attempt)"))
-                            delay(1500L)
-                        }
-                    }
+            val command = BassCommand(
+                deviceAddress = device.address,
+                controlPointData = cpData,
+                autoDisconnect = false
+            )
+
+            // Retry logic: attempt 2 times for transient BLE failures
+            repeat(2) { attempt ->
+                try {
+                    bassGattManager.sendControlPoint(command)
+                    // Success: update device and return
+                    device.selectedBisIndexes = channelsToSend.map { it.index }
+                    logi("BIS command succeeded for ${device.address}, indexes=${device.selectedBisIndexes}")
+                    return BisSelectionResult.Success(device, device.selectedBisIndexes)
+                } catch (e: Exception) {
+                    logw("BIS command attempt ${attempt + 1} failed for ${device.address}", e)
                 }
             }
 
-        } catch (e: Exception) {
-            loge("selectBisChannel: Unexpected error for ${device.address}", e)
-            onCommandLog(CommandLog("Unexpected error for ${device.name}: ${e.message}"))
-        }
-    }
+            return BisSelectionResult.Failure(device, "Failed to send BIS command after retries")
 
-    /**
-     * Convenience method to select a single BIS index.
-     *
-     * @param device The [AuracastDevice] to control.
-     * @param bisIndex Single BIS index to select.
-     */
-    fun selectBisChannel(device: AuracastDevice, bisIndex: Int) {
-        logd("selectBisChannel(single): Request to select BIS index=$bisIndex for ${device.address}")
-        selectBisChannel(device, listOf(bisIndex))
+        } catch (e: Exception) {
+            loge("BIS selection failed for ${device.address}", e)
+            return BisSelectionResult.Failure(device, e.message ?: "Unknown error")
+        }
     }
 }
