@@ -30,8 +30,8 @@ android {
          * versionName is "major.minor.patch"
          */
         val versionMajor = 2
-        val versionMinor = 2
-        val versionPatch = 3
+        val versionMinor = 3
+        val versionPatch = 0
 
         versionCode = (versionMajor * 10000) + (versionMinor * 100) + versionPatch
         versionName = "$versionMajor.$versionMinor.$versionPatch"
@@ -108,6 +108,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.navigation.runtime.android)
+    implementation(libs.androidx.ui.text)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

@@ -4,104 +4,77 @@ import android.app.Application
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.Color
-import androidx.datastore.preferences.core.*
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import androidx.lifecycle.*
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import com.android.broadcastassistant.R
-import com.android.broadcastassistant.audio.*
-import com.android.broadcastassistant.ble.*
-import com.android.broadcastassistant.data.*
-import com.android.broadcastassistant.util.*
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import com.android.broadcastassistant.audio.BassGattManager
+import com.android.broadcastassistant.ble.AuracastEaScanner
+import com.android.broadcastassistant.ble.BisSelectionManager
+import com.android.broadcastassistant.data.AuracastDevice
+import com.android.broadcastassistant.data.BisSelectionResult
+import com.android.broadcastassistant.util.logd
+import com.android.broadcastassistant.util.logi
+import com.android.broadcastassistant.util.logw
+import com.android.broadcastassistant.util.loge
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
-// Extension property for DataStore
 private val Application.dataStore by preferencesDataStore(name = "auracast_prefs")
-
-// Key to store the selected BIS index
 private val SELECTED_BIS_KEY = intPreferencesKey("selected_bis_index")
 
 /**
- * ViewModel for Auracast Assistant app.
+ * ViewModel for Auracast scanning, device list, and BIS selection.
  *
- * Responsibilities:
- * - Manage BLE scanning for Auracast broadcasters
- * - Maintain device list & scanning state
- * - Handle BIS selection (single BIS only)
- * - Log commands for UI
- * - Persist last selected BIS for UI highlight (no auto-reconnect)
- *
- * @param application Application context
+ * Handles:
+ * - Device scanning via [AuracastEaScanner]
+ * - BIS selection via [BisSelectionManager]
+ * - State updates for UI
+ * - Persists first selected BIS index for highlight
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 class AuracastViewModel(application: Application) : AndroidViewModel(application) {
 
-    /** List of currently discovered Auracast devices */
+    // State flows exposed to the UI
     private val _devices = MutableStateFlow<List<AuracastDevice>>(emptyList())
     val devices: StateFlow<List<AuracastDevice>> = _devices
 
-    /** List of command logs for UI */
-    private val _commandLogs = MutableStateFlow<List<CommandLog>>(emptyList())
-
-    /** Current scanning state */
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning
 
-    /** Bluetooth permission state */
-    private val _permissionsGranted = MutableStateFlow(false)
-    val permissionsGranted: StateFlow<Boolean> = _permissionsGranted
-
-    /** Status message shown on UI (scanning, connecting, error) */
     private val _statusMessage = MutableStateFlow("")
     val statusMessage: StateFlow<String> = _statusMessage
 
-    /** Status text color for UI */
     private val _statusColor = MutableStateFlow(Color.Black)
 
-    /** Controller for BASS functionality */
     private val bassGattManager = BassGattManager(getApplication<Application>().applicationContext)
-
-    /** Manager handling BIS selection logic with command logging */
-    private val bisSelectionManager = BisSelectionManager(
-        onDeviceUpdate = { updatedDevices ->
-            logd("Devices updated → ${updatedDevices.size} devices")
-            _devices.value = updatedDevices
-        },
-        getCurrentDevices = { _devices.value },
-        bassGattManager = bassGattManager,
-        onCommandLog = { commandLog ->
-            val updatedList = _commandLogs.value.toMutableList()
-            updatedList.add(commandLog)
-            _commandLogs.value = updatedList
-            logd("Command log added → ${commandLog.message}")
-        }
-    )
-
-    /** Scanner for Auracast Extended Advertising packets */
+    private val bisSelectionManager = BisSelectionManager(bassGattManager)
     private val scanner = AuracastEaScanner(getApplication<Application>().applicationContext)
 
+    private val _permissionsGranted = MutableStateFlow(false)
+    val permissionsGranted: StateFlow<Boolean> = _permissionsGranted
+
     init {
+        // Initialize scanner and restore saved BIS selection
         viewModelScope.launch {
             try {
-                logi("Initializing AuracastEaScanner")
+                logd("Initializing Auracast scanner and restoring BIS selection")
+                val savedBisIndex = getApplication<Application>().dataStore.data
+                    .map { prefs -> prefs[SELECTED_BIS_KEY] ?: -1 }
+                    .first()
+                logi("Saved BIS index loaded: $savedBisIndex")
 
-                // Load last selected BIS index for UI highlight
-                val savedBisIndex = try {
-                    getApplication<Application>().dataStore.data
-                        .map { prefs -> prefs[SELECTED_BIS_KEY] ?: -1 }
-                        .first()
-                } catch (e: Exception) {
-                    loge("Failed to read saved BIS index", e)
-                    -1
-                }
-
-                // Collect scanned devices
                 scanner.broadcasters.collect { scannedDevices ->
+                    logd("Scanned ${scannedDevices.size} Auracast devices")
                     _devices.value = scannedDevices.map { device ->
-                        if (savedBisIndex != -1) device.copy(selectedBisIndex = savedBisIndex)
+                        if (savedBisIndex != -1) device.copy(selectedBisIndexes = listOf(savedBisIndex))
                         else device
                     }
-                    logd("Collected ${scannedDevices.size} scanned devices")
                 }
             } catch (e: Exception) {
                 loge("Error initializing scanner", e)
@@ -109,115 +82,120 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** Update Bluetooth permission state */
+    /** Update Bluetooth permissions state and stop scan if revoked */
     fun updatePermissionsGranted(granted: Boolean) {
+        logi("Bluetooth permissions updated: $granted")
         _permissionsGranted.value = granted
-        logd("Permissions updated → granted=$granted")
-        if (!granted) stopScan()
+        if (!granted) {
+            logw("Permissions revoked, stopping scan")
+            stopScan()
+        }
     }
 
     /** Start Auracast scanning */
     fun startScan() {
-        try {
-            logd("startScan() called")
-            if (!_permissionsGranted.value) {
-                _statusMessage.value = getApplication<Application>().getString(R.string.scan_permissions_required)
-                _statusColor.value = Color.Red
-                logw("Cannot start scan, permissions missing")
-                return
-            }
-
-            if (_isScanning.value) return
-
-            _devices.value = emptyList()
-            scanner.clearDevices()
-            scanner.startScanningAuracastEa()
-            _isScanning.value = true
-            _statusMessage.value = getApplication<Application>().getString(R.string.scan_starting)
-            _statusColor.value = Color.Blue
-            logi("Scan started successfully")
-        } catch (e: Exception) {
-            loge("Failed to start scan", e)
-            _statusMessage.value = "Scan start failed"
-            _statusColor.value = Color.Red
+        if (!_permissionsGranted.value) {
+            logw("Cannot start scan: permissions not granted")
+            return
         }
+        if (_isScanning.value) {
+            logw("Scan already running")
+            return
+        }
+
+        logi("Starting Auracast scan")
+        _devices.value = emptyList() // clear current devices
+        scanner.clearDevices()
+        scanner.startScanningAuracastEa()
+        _isScanning.value = true
+        _statusMessage.value = getApplication<Application>().getString(R.string.scan_starting)
+        _statusColor.value = Color.Blue
     }
 
     /** Stop Auracast scanning */
     fun stopScan() {
-        try {
-            if (!_isScanning.value) return
-            scanner.stopScanningAuracastEa()
-            _isScanning.value = false
-            val count = _devices.value.size
-            _statusMessage.value = getApplication<Application>().getString(R.string.scan_stopped, count)
-            _statusColor.value = Color.Black
-            logi("Scan stopped with $count devices")
-        } catch (e: Exception) {
-            loge("Failed to stop scan", e)
-            _statusMessage.value = "Scan stop failed"
-            _statusColor.value = Color.Red
+        if (!_isScanning.value) {
+            logw("Stop scan called but scan not running")
+            return
         }
+
+        logi("Stopping Auracast scan")
+        scanner.stopScanningAuracastEa()
+        _isScanning.value = false
+        _statusMessage.value = getApplication<Application>().getString(
+            R.string.scan_stopped, _devices.value.size
+        )
+        _statusColor.value = Color.Black
     }
 
     /** Toggle scanning state */
     fun toggleScan() {
-        logd("toggleScan() called")
-        try {
-            if (_isScanning.value) stopScan() else startScan()
-        } catch (e: Exception) {
-            loge("Error toggling scan", e)
-        }
+        logd("Toggling scan. Current state: ${_isScanning.value}")
+        if (_isScanning.value) stopScan() else startScan()
     }
 
     /**
-     * Select a BIS channel for a device and log command messages.
-     * Stores the selected BIS index in DataStore for UI highlight only.
-     *
-     * @param device AuracastDevice to select BIS for
-     * @param bisIndex Index of BIS channel
+     * Safely select BIS channels for a device.
+     * - Updates device state and UI
+     * - Persists first selected BIS index
+     * - Handles success and failure messages
      */
-    fun selectBisChannel(device: AuracastDevice, bisIndex: Int) {
+    fun selectBisChannels(device: AuracastDevice, bisIndexes: List<Int>) {
+        if (bisIndexes.isEmpty()) {
+            logw("selectBisChannels called with empty list")
+            return
+        }
+
         viewModelScope.launch {
+            logi("Selecting BIS indexes ${bisIndexes.joinToString()} for device ${device.address}")
+            _statusMessage.value = getApplication<Application>().getString(
+                R.string.switching_language, bisIndexes.joinToString(", ")
+            )
+            _statusColor.value = Color.Yellow
+
             try {
-                val bis = device.bisChannels.find { it.index == bisIndex }
-                val lang = bis?.language ?: "Unknown"
+                val result = bisSelectionManager.selectBisChannels(device, bisIndexes)
+                when (result) {
+                    is BisSelectionResult.Success -> {
+                        logi("BIS selection succeeded: ${result.selectedIndexes.joinToString()}")
+                        val indexesStr = result.selectedIndexes.joinToString(", ")
+                        _statusMessage.value = getApplication<Application>().getString(
+                            R.string.connected_language, indexesStr
+                        )
+                        _statusColor.value = Color.Green
 
-                // Update status for UI
-                _statusMessage.value = getApplication<Application>().getString(R.string.switching_language, lang)
-                _statusColor.value = Color.Yellow
+                        _devices.value = _devices.value.map { d ->
+                            if (d.address == device.address) d.copy(selectedBisIndexes = result.selectedIndexes)
+                            else d
+                        }
 
-                // Perform BIS selection
-                bisSelectionManager.selectBisChannel(device, bisIndex)
-
-                // Save selected BIS index for UI highlight only
-                getApplication<Application>().dataStore.edit { prefs ->
-                    prefs[SELECTED_BIS_KEY] = bisIndex
+                        getApplication<Application>().dataStore.edit { prefs ->
+                            prefs[SELECTED_BIS_KEY] = result.selectedIndexes.first()
+                        }
+                    }
+                    is BisSelectionResult.Failure -> {
+                        logw("BIS selection failed: ${result.reason}")
+                        _statusMessage.value = "BIS switch failed: ${result.reason}"
+                        _statusColor.value = Color.Red
+                    }
                 }
-
-                _statusMessage.value = getApplication<Application>().getString(R.string.connected_language, lang)
-                _statusColor.value = Color.Green
-
-            } catch (_: TimeoutCancellationException) {
-                _statusMessage.value = getApplication<Application>().getString(R.string.switch_timeout, bisIndex.toString())
-                _statusColor.value = Color.Red
-
             } catch (e: Exception) {
-                loge("BIS channel selection failed", e)
-                _statusMessage.value = getApplication<Application>().getString(R.string.switch_failed)
+                loge("Exception during BIS selection", e)
+                _statusMessage.value = "BIS switch failed: ${e.message}"
                 _statusColor.value = Color.Red
             }
         }
     }
 
-    /** Stop scanner when ViewModel is cleared */
+    /** Cleanup resources when ViewModel is destroyed */
     override fun onCleared() {
         super.onCleared()
         try {
+            logi("ViewModel clearing: stopping scanner and disconnecting GATT")
             scanner.stopScanningAuracastEa()
-            logi("Scanner stopped on ViewModel cleared")
+            bassGattManager.disconnectAll()
         } catch (e: Exception) {
-            loge("Error stopping scanner on ViewModel cleared", e)
+            loge("Error during ViewModel cleared", e)
         }
     }
 }
