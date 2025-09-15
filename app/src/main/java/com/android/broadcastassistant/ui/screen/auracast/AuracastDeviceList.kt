@@ -14,17 +14,21 @@ import com.android.broadcastassistant.data.AuracastDevice
 import com.android.broadcastassistant.ui.theme.AppTextPrimary
 
 /**
- * Displays a scrollable list of Auracast devices.
+ * Displays a scrollable list of Auracast devices (broadcasters and receivers).
  *
- * Handles permission checks, status messages, and highlights the currently selected device.
+ * Features:
+ * - Shows status messages above the list.
+ * - Handles permission warnings if Bluetooth scan/connect permissions are missing.
+ * - Highlights the currently selected device.
+ * - Only allows clicks on broadcasters (devices with broadcastId).
  *
  * @param devices List of [AuracastDevice]s to display.
- * @param permissionsGranted Whether Bluetooth permissions are granted.
+ * @param permissionsGranted Whether required Bluetooth permissions are granted.
  * @param statusMessage Optional status message to show above the list.
- * @param onDeviceClick Callback invoked when a device is clicked.
+ * @param onDeviceClick Callback invoked when a broadcaster device is clicked.
  * @param modifier Optional [Modifier] for the outer container.
- * @param listState [LazyListState] for scrolling control.
- * @param selectedDeviceAddress Address of the currently selected device for highlighting.
+ * @param listState [LazyListState] for scroll control.
+ * @param selectedDeviceAddress Address of the currently selected device (for highlighting).
  */
 @Composable
 fun AuracastDeviceList(
@@ -34,15 +38,14 @@ fun AuracastDeviceList(
     onDeviceClick: (AuracastDevice) -> Unit,
     modifier: Modifier = Modifier,
     listState: LazyListState,
-    selectedDeviceAddress: String? = null // highlight selected device
+    selectedDeviceAddress: String? = null
 ) {
-    // Column container with padding and full size
     Column(
         modifier = modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Show status message if provided
+        // Show status message if available
         if (statusMessage.isNotBlank()) {
             Text(
                 text = statusMessage,
@@ -51,31 +54,49 @@ fun AuracastDeviceList(
             )
         }
 
-        // Show permissions warning if Bluetooth permissions not granted
+        // Show permission warning and prevent further UI if not granted
         if (!permissionsGranted) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Bluetooth permissions are required.", color = Color.Red)
+                Text(
+                    text = "Bluetooth permissions are required.",
+                    color = Color.Red
+                )
             }
-            return@Column // Exit early if permissions are missing
+            return@Column // Stop further rendering if permissions missing
         }
 
-        // Show device list if devices are available
+        // Show device list if available
         if (devices.isNotEmpty()) {
             LazyColumn(state = listState) {
                 items(devices) { device ->
-                    // Determine if this device is currently selected
                     val isSelected = device.address == selectedDeviceAddress
 
-                    // Display individual device card
+                    // AuracastDeviceCard handles broadcaster/receiver styling
                     AuracastDeviceCard(
                         device = device,
-                        isSelected = isSelected, // highlight selected device
-                        onClick = { onDeviceClick(device) }
+                        isSelected = isSelected,
+                        onClick = {
+                            // Only allow clicks for broadcasters
+                            if (device.broadcastId != null) {
+                                onDeviceClick(device)
+                            }
+                        }
                     )
                 }
+            }
+        } else {
+            // Show fallback text if no devices found
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "No devices found",
+                    color = AppTextPrimary
+                )
             }
         }
     }

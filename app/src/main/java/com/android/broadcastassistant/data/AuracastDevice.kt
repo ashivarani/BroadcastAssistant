@@ -22,7 +22,7 @@ data class AuracastDevice(
     var selectedBisIndexes: List<Int> = emptyList(), // single or multi
     val broadcastId: Int? = null,
     val broadcastCode: ByteArray? = null,
-    val sourceId: Int? = null
+    var sourceId: Int? = null
 ) {
 
     /**

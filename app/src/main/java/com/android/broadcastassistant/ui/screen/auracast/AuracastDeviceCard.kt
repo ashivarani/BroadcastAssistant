@@ -5,7 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -13,10 +13,14 @@ import androidx.compose.ui.text.font.FontWeight
 import com.android.broadcastassistant.data.AuracastDevice
 
 /**
- * Displays a card representing an Auracast broadcaster device.
+ * Displays a card representing an Auracast device (broadcaster or receiver).
  *
- * Shows device name, address, RSSI, optional broadcast ID, and any selected BIS indexes.
- * Highlights the card if [isSelected] is true.
+ * Features:
+ * - Shows device name, address, and RSSI.
+ * - Shows broadcast ID if the device is a broadcaster.
+ * - Shows selected BIS indexes if available.
+ * - Highlights the card if [isSelected] is true.
+ * - Differentiates broadcasters (blue) and receivers (green).
  *
  * @param device The [AuracastDevice] to display.
  * @param isSelected Whether this device is currently selected (affects card color).
@@ -28,19 +32,23 @@ fun AuracastDeviceCard(
     isSelected: Boolean = false,
     onClick: () -> Unit
 ) {
-    // Card container with padding, click behavior, and color based on selection
+    // Determine card background color based on selection and device type
+    val containerColor = when {
+        isSelected -> Color(0xFF1976D2)                 // Highlight selected device
+        device.broadcastId == null -> Color(0xFF43A047) // Receiver (green)
+        else -> Color(0xFF1A73E8)                       // Broadcaster (blue)
+    }
+
     Card(
         modifier = Modifier
-            .fillMaxWidth() // Make card stretch full width
-            .padding(vertical = 8.dp) // Vertical spacing between cards
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
             .clickable { onClick() }, // Handle click events
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) Color(0xFF1976D2) else Color(0xFF1A73E8) // Highlight selected card
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp) // Card shadow
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Display device name and address
+            // Device name and address (bold)
             Text(
                 text = "${device.name} (${device.address})",
                 fontWeight = FontWeight.Bold,
@@ -48,36 +56,42 @@ fun AuracastDeviceCard(
                 color = Color.White
             )
 
-            // Display device RSSI
+            // RSSI display
             Text(
                 text = "RSSI: ${device.rssi} dBm",
                 fontSize = 14.sp,
                 color = Color.White
             )
 
-            // Display optional Broadcast ID if available
-            device.broadcastId?.let {
+            // Show broadcast ID for broadcasters
+            device.broadcastId?.let { broadcastId ->
                 Text(
-                    text = "Broadcast ID: $it",
+                    text = "Broadcast ID: $broadcastId",
                     fontSize = 14.sp,
                     color = Color.White
                 )
             }
 
-            // Overlay for selected BIS channels
+            // Label receivers
+            if (device.broadcastId == null) {
+                Text(
+                    text = "Receiver",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
+            // Overlay displaying selected BIS channels
             if (device.selectedBisIndexes.isNotEmpty()) {
                 Row(
                     modifier = Modifier
-                        .padding(top = 6.dp) // Top spacing from previous Text
-                        .background(Color(0x33000000)) // Semi-transparent background
-                        .padding(horizontal = 6.dp, vertical = 2.dp) // Inner padding
+                        .padding(top = 6.dp)
+                        .background(Color(0x33000000)) // Semi-transparent overlay
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
-                    Text(
-                        text = "Selected BIS: ",
-                        color = Color.Yellow,
-                        fontSize = 12.sp
-                    )
-                    // Display each selected BIS index
+                    Text("Selected BIS: ", color = Color.Yellow, fontSize = 12.sp)
                     device.selectedBisIndexes.forEach { index ->
                         Text("$index ", color = Color.Green, fontSize = 12.sp)
                     }
