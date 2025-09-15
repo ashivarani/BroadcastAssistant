@@ -13,25 +13,44 @@ import com.android.broadcastassistant.data.AuracastDevice
  * - Permissions granted
  * - Status message display
  * - Selected BIS highlighting for alternate devices
+ * - Broadcasters vs Receivers differentiation
  */
 @Composable
 @Preview(showBackground = true, apiLevel = 34)
 fun AuracastScreenPreview() {
-    // Generate dummy devices from preview helper
-    val dummyDevices: List<AuracastDevice> = PreviewAuracastDevice.fakeBroadcasters().mapIndexed { index, device ->
-        // Mark every other device with selected BIS indices for demonstration
+    // Generate dummy broadcasters
+    val broadcasterDevices: List<AuracastDevice> = PreviewAuracastDevice.fakeBroadcasters().mapIndexed { index, device ->
         device.copy(
             selectedBisIndexes = if (index % 2 == 0) listOf(1, 2) else emptyList()
         )
     }
 
-    // Display AuracastScreen with preview parameters
+    // Generate dummy receivers manually (broadcastId = null)
+    val receiverDevices: List<AuracastDevice> = List(3) { index ->
+        AuracastDevice(
+            name = "Receiver $index",
+            address = "00:11:22:33:44:${index}5",
+            rssi = -50 + index,
+            broadcastId = null, // null = receiver
+            selectedBisIndexes = if (index % 2 != 0) listOf(1) else emptyList()
+        )
+    }
+
+    // Display AuracastScreen with separate broadcasters and receivers
     AuracastScreen(
-        devices = dummyDevices,
-        isScanning = true, // simulate scanning state
-        permissionsGranted = true, // simulate permissions granted
-        statusMessage = "Scanning – ${dummyDevices.size} devices found", // show status message
-        onToggleScan = {}, // no-op for preview
-        onDeviceClick = {} // no-op for preview
+        broadcasters = broadcasterDevices,
+        receivers = receiverDevices,
+        isScanning = true,
+        permissionsGranted = true,
+        statusMessage = "Scanning – ${broadcasterDevices.size + receiverDevices.size} devices found",
+        onToggleScan = {},
+        onDeviceClick = { device ->
+            // Only simulate navigation for broadcasters in preview
+            if (device.broadcastId != null) {
+                println("Broadcaster clicked: ${device.name} – navigate to BIS selection")
+            } else {
+                println("Receiver clicked: ${device.name} – no BIS selection")
+            }
+        }
     )
 }

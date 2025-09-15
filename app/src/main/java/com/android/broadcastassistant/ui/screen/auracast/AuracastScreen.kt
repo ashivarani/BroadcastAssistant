@@ -13,36 +13,41 @@ import androidx.compose.ui.unit.sp
 import com.android.broadcastassistant.data.AuracastDevice
 
 /**
- * Main screen displaying Auracast broadcasters.
+ * Main screen displaying Auracast broadcasters and receivers.
  *
- * Shows a top app bar with scan toggle button, a list of devices,
- * highlights the selected device, and handles permission & status messages.
+ * Features:
+ * - Top App Bar with app title and scan toggle button.
+ * - Shows merged list of broadcasters and receivers.
+ * - Highlights the currently selected device.
+ * - Handles permission and status messages.
+ * - Restricts clicks for receivers (no BIS channels).
  *
- * @param devices List of [AuracastDevice]s discovered or mocked for UI.
+ * @param broadcasters List of broadcaster [AuracastDevice]s discovered or mocked.
+ * @param receivers List of receiver [AuracastDevice]s discovered via Scan Delegators.
  * @param isScanning Whether BLE scanning is currently active.
  * @param permissionsGranted Whether Bluetooth permissions are granted.
- * @param statusMessage Optional status message to display above the list.
+ * @param statusMessage Optional status message displayed above the list.
  * @param onToggleScan Callback to start/stop scanning.
- * @param onDeviceClick Callback when a device is clicked.
+ * @param onDeviceClick Callback invoked when a broadcaster device is clicked.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuracastScreen(
-    devices: List<AuracastDevice>,
+    broadcasters: List<AuracastDevice>,
+    receivers: List<AuracastDevice>,
     isScanning: Boolean,
     permissionsGranted: Boolean,
     statusMessage: String,
     onToggleScan: () -> Unit,
     onDeviceClick: (AuracastDevice) -> Unit
 ) {
-    // Remember scroll state for LazyColumn
-    val listState = rememberLazyListState()
+    val listState = rememberLazyListState() // For controlling scrolling
+    var selectedDeviceAddress by remember { mutableStateOf<String?>(null) } // Track selected device
 
-    // Track the currently selected device by its address
-    var selectedDeviceAddress by remember { mutableStateOf<String?>(null) }
+    // Merge broadcasters and receivers for display
+    val allDevices = broadcasters + receivers
 
     Scaffold(
-        // Top app bar with title and scan toggle button
         topBar = {
             TopAppBar(
                 title = {
@@ -54,8 +59,9 @@ fun AuracastScreen(
                     )
                 },
                 actions = {
+                    // Scan toggle button
                     Button(
-                        onClick = onToggleScan, // Trigger scan toggle
+                        onClick = onToggleScan,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isScanning) Color(0xFF0D47A1) else Color(0xFF1976D2),
                             contentColor = Color.White
@@ -76,20 +82,24 @@ fun AuracastScreen(
         },
         containerColor = Color.White
     ) { padding ->
-        // Display the list of Auracast devices
+        // Display merged list of broadcasters and receivers
         AuracastDeviceList(
-            devices = devices,
+            devices = allDevices,
             permissionsGranted = permissionsGranted,
             statusMessage = statusMessage,
             onDeviceClick = { device ->
-                selectedDeviceAddress = device.address // update selected device
-                onDeviceClick(device) // propagate click event
+                selectedDeviceAddress = device.address // Highlight selected device
+
+                // Only navigate/call callback if the device is a broadcaster
+                if (device.broadcastId != null) {
+                    onDeviceClick(device)
+                }
             },
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding), // respect Scaffold padding
+                .padding(padding),
             listState = listState,
-            selectedDeviceAddress = selectedDeviceAddress // highlight selected device
+            selectedDeviceAddress = selectedDeviceAddress
         )
     }
 }

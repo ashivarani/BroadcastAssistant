@@ -20,8 +20,11 @@ object UuidUtils {
     /** Broadcast Audio Scan Service (BASS) UUID (16-bit: 0x184F). */
     val BASS_SERVICE_UUID: UUID = from16Bit(0x184F)
 
-    /** BASS Control Point Characteristic UUID (16-bit: 0x2B2B). */
-    val BASS_CONTROL_POINT_UUID: UUID = from16Bit(0x2B2B)
+    /** BASS Control Point Characteristic UUID (16-bit: 0x2BBA). */
+    val BASS_CONTROL_POINT_UUID: UUID = from16Bit(0x2BBA)
+
+    /** BASS Broadcast Receive State Characteristic UUID (16-bit: 0x2BC9). */
+    val BASS_BROADCAST_RECEIVE_STATE_UUID: UUID = from16Bit(0x2BC9)
 
     /**
      * Convert a 16-bit Bluetooth UUID into a full 128-bit [UUID].

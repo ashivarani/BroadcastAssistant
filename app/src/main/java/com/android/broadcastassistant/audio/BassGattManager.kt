@@ -8,34 +8,31 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import com.android.broadcastassistant.data.BassCommand
+import com.android.broadcastassistant.delegator.BassBroadcastStateParser
 import com.android.broadcastassistant.util.*
 import kotlinx.coroutines.*
-import java.util.*
+import java.util.UUID
 import kotlin.coroutines.*
 
 /**
  * Manager for Broadcast Audio Scan Service (BASS) GATT interactions.
- *
- * Responsibilities:
- * - Connect to Scan Delegator devices via GATT.
- * - Discover BASS service and Control Point characteristic.
- * - Send BASS Control Point commands via [BassCommand].
- * - Handle multiple simultaneous connections and safe disconnection.
- *
- * Logs all key steps, warnings, and errors using the centralized logging utility.
+ * Handles connections to Scan Delegator devices, sending Control Point commands,
+ * reading Broadcast Receive State (BRS), and managing multiple simultaneous connections.
  */
 class BassGattManager(private val context: Context) {
 
     companion object {
-        private val BASS_SERVICE_UUID: UUID = UuidUtils.BASS_SERVICE_UUID
-        private val BASS_CONTROL_POINT_UUID: UUID = UuidUtils.BASS_CONTROL_POINT_UUID
+        private val BASS_SERVICE_UUID: UUID = UuidUtils.BASS_SERVICE_UUID // BASS service UUID
+        private val BASS_CONTROL_POINT_UUID: UUID = UuidUtils.BASS_CONTROL_POINT_UUID // Control Point UUID
+        private val BASS_BRS_UUID: UUID = UuidUtils.BASS_BROADCAST_RECEIVE_STATE_UUID // Broadcast Receive State UUID
     }
 
-    /** Store multiple connections keyed by device address */
-    private val bluetoothGatt = mutableMapOf<String, BluetoothGatt>()
+    private val bluetoothGatt = mutableMapOf<String, BluetoothGatt>() // Active GATT connections keyed by device address
+    private val gattCallbacks = mutableMapOf<String, BluetoothGattCallback>() // Store callbacks per device
 
     /**
-     * Sends a BASS Control Point command to a device with retry logic.
+     * Sends a BASS Control Point command to a device.
+     * Handles GATT connection, service discovery, retries, and optional auto-disconnect.
      */
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     suspend fun sendControlPoint(command: BassCommand) {
@@ -46,7 +43,7 @@ class BassGattManager(private val context: Context) {
             val device: BluetoothDevice? = try {
                 adapter?.getRemoteDevice(command.deviceAddress)
             } catch (e: IllegalArgumentException) {
-                loge("Invalid device address ${command.deviceAddress}", e)
+                loge("Invalid device address: ${command.deviceAddress}", e)
                 null
             }
 
@@ -60,7 +57,7 @@ class BassGattManager(private val context: Context) {
                 return
             }
 
-            // Reuse existing GATT connection if available, else connect
+            // Use existing GATT or connect if not present
             val gatt = bluetoothGatt[command.deviceAddress] ?: connectGattSuspend(device).also {
                 bluetoothGatt[command.deviceAddress] = it
             }
@@ -79,7 +76,7 @@ class BassGattManager(private val context: Context) {
                 return
             }
 
-            // Retry up to 2 times
+            // Retry write up to 2 times
             repeat(2) { attempt ->
                 try {
                     writeCharacteristicSuspend(gatt, controlPointChar, command.controlPointData)
@@ -91,7 +88,6 @@ class BassGattManager(private val context: Context) {
             }
 
             loge("All retries failed for ${command.deviceAddress}")
-
             if (command.autoDisconnect) disconnect(command.deviceAddress)
 
         } catch (e: Exception) {
@@ -100,10 +96,103 @@ class BassGattManager(private val context: Context) {
         }
     }
 
+    /**
+     * Reads the Broadcast Receive State (BRS) from a connected device.
+     * Returns a list of [com.android.broadcastassistant.delegator.BassBroadcastStateParser.BassSourceInfo] or empty list on failure.
+     */
+    @ExperimentalCoroutinesApi
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    suspend fun readBroadcastReceiveState(deviceAddress: String): List<BassBroadcastStateParser.BassSourceInfo> {
+        val gatt = bluetoothGatt[deviceAddress]
+            ?: throw IllegalStateException("No GATT connection for $deviceAddress")
+
+        val service = gatt.getService(BASS_SERVICE_UUID)
+            ?: throw IllegalStateException("BASS service not found on $deviceAddress")
+
+        val stateChar = service.getCharacteristic(BASS_BRS_UUID)
+            ?: throw IllegalStateException("Broadcast Receive State characteristic not found")
+
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            loge("BLUETOOTH_CONNECT permission not granted")
+            return emptyList()
+        }
+
+        return suspendCancellableCoroutine { cont ->
+            try {
+                // Temporary callback for this read operation
+                val callback = object : BluetoothGattCallback() {
+                    override fun onCharacteristicRead(
+                        gatt: BluetoothGatt,
+                        characteristic: BluetoothGattCharacteristic,
+                        status: Int
+                    ) {
+                        if (characteristic.uuid == BASS_BRS_UUID) {
+                            if (status == BluetoothGatt.GATT_SUCCESS) {
+                                @Suppress("DEPRECATION") val value = characteristic.value ?: byteArrayOf()
+                                val sources = BassBroadcastStateParser.parse(value) // Parse BRS
+                                cont.resume(sources) {}
+                                logi("BRS read succeeded for ${gatt.device.address}")
+                            } else {
+                                logw("Failed to read BRS, status=$status")
+                                cont.resume(emptyList()) {}
+                            }
+                        }
+                    }
+                }
+
+                // Store callback for this device
+                gattCallbacks[deviceAddress] = callback
+
+                // Initiate characteristic read
+                if (!gatt.readCharacteristic(stateChar)) {
+                    loge("readCharacteristic initiation failed for $deviceAddress")
+                    cont.resume(emptyList()) {}
+                }
+
+                // Ensure coroutine cancellation cleans up if needed
+                cont.invokeOnCancellation {
+                    try { disconnect(deviceAddress) } catch (_: Exception) {}
+                }
+
+            } catch (e: Exception) {
+                loge("Failed to read Broadcast Receive State", e)
+                cont.resume(emptyList()) {}
+            }
+        }
+    }
+
+    /** Disconnects and cleans up a single device's GATT connection */
+    fun disconnect(deviceAddress: String) {
+        bluetoothGatt[deviceAddress]?.let { gatt ->
+            try {
+                if (ContextCompat.checkSelfPermission(context,
+                        Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                    gatt.close() // Close GATT safely
+                    logi("Closed GATT connection for $deviceAddress")
+                } else {
+                    logw("BLUETOOTH_CONNECT permission not granted; skipping close() for $deviceAddress")
+                }
+            } catch (se: SecurityException) {
+                loge("SecurityException on bluetoothGatt.close() for $deviceAddress", se)
+            } finally {
+                bluetoothGatt.remove(deviceAddress) // Remove from map
+                gattCallbacks.remove(deviceAddress) // Remove callback
+            }
+        }
+    }
+
+    /** Disconnects all active GATT connections */
+    fun disconnectAll() {
+        val addresses = bluetoothGatt.keys.toList() // Copy keys to avoid concurrent modification
+        addresses.forEach { disconnect(it) }
+    }
+
+    /** Suspended GATT connection with service discovery */
     private suspend fun connectGattSuspend(device: BluetoothDevice): BluetoothGatt =
         suspendCancellableCoroutine { cont ->
             val callback = object : BluetoothGattCallback() {
-
                 override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
                     try {
                         if (status != BluetoothGatt.GATT_SUCCESS) {
@@ -114,7 +203,6 @@ class BassGattManager(private val context: Context) {
 
                         if (newState == BluetoothGatt.STATE_CONNECTED) {
                             logi("Connected to ${gatt.device.address}")
-
                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
                                 try {
                                     logd("Discovering services on ${gatt.device.address}")
@@ -161,6 +249,7 @@ class BassGattManager(private val context: Context) {
             }
         }
 
+    /** Suspended characteristic write with logging and exception handling */
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private suspend fun writeCharacteristicSuspend(
         gatt: BluetoothGatt,
@@ -180,33 +269,5 @@ class BassGattManager(private val context: Context) {
             loge("Unexpected error during write", e)
             cont.resumeWithException(e)
         }
-    }
-
-    /**
-     * Disconnect and cleanup a specific device GATT connection.
-     */
-    fun disconnect(deviceAddress: String) {
-        bluetoothGatt[deviceAddress]?.let { gatt ->
-            try {
-                if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
-                    gatt.close()
-                    logi("Closed GATT connection for $deviceAddress")
-                } else {
-                    logw("BLUETOOTH_CONNECT permission not granted, skipping close() for $deviceAddress")
-                }
-            } catch (se: SecurityException) {
-                loge("SecurityException on bluetoothGatt.close() for $deviceAddress", se)
-            } finally {
-                bluetoothGatt.remove(deviceAddress)
-            }
-        }
-    }
-
-    /**
-     * Disconnect and cleanup all GATT connections.
-     */
-    fun disconnectAll() {
-        val addresses = bluetoothGatt.keys.toList()
-        addresses.forEach { disconnect(it) }
     }
 }

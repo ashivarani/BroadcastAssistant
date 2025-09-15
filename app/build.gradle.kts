@@ -29,8 +29,8 @@ android {
          * versionCode is calculated as: major * 10000 + minor * 100 + patch
          * versionName is "major.minor.patch"
          */
-        val versionMajor = 2
-        val versionMinor = 3
+        val versionMajor = 3
+        val versionMinor = 0
         val versionPatch = 0
 
         versionCode = (versionMajor * 10000) + (versionMinor * 100) + versionPatch
@@ -109,6 +109,7 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.navigation.runtime.android)
     implementation(libs.androidx.ui.text)
+    implementation(libs.androidx.room.ktx)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
