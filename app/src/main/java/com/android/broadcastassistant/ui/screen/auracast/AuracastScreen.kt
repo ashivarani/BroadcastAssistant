@@ -1,5 +1,7 @@
 package com.android.broadcastassistant.ui.screen.auracast
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -10,41 +12,34 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.broadcastassistant.data.AuracastDevice
+import com.android.broadcastassistant.viewmodel.AuracastViewModel
 
 /**
- * Main screen displaying Auracast broadcasters and receivers.
+ * Main screen for Auracast Assistant.
  *
- * Features:
- * - Top App Bar with app title and scan toggle button.
- * - Shows merged list of broadcasters and receivers.
- * - Highlights the currently selected device.
- * - Handles permission and status messages.
- * - Restricts clicks for receivers (no BIS channels).
- *
- * @param broadcasters List of broadcaster [AuracastDevice]s discovered or mocked.
- * @param receivers List of receiver [AuracastDevice]s discovered via Scan Delegators.
- * @param isScanning Whether BLE scanning is currently active.
- * @param permissionsGranted Whether Bluetooth permissions are granted.
- * @param statusMessage Optional status message displayed above the list.
- * @param onToggleScan Callback to start/stop scanning.
- * @param onDeviceClick Callback invoked when a broadcaster device is clicked.
+ * - Collects state from [AuracastViewModel]
+ * - Displays broadcasters + receivers
+ * - Handles scan toggle + device click via [onDeviceClick]
  */
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuracastScreen(
-    broadcasters: List<AuracastDevice>,
-    receivers: List<AuracastDevice>,
-    isScanning: Boolean,
-    permissionsGranted: Boolean,
-    statusMessage: String,
-    onToggleScan: () -> Unit,
+    viewModel: AuracastViewModel,
     onDeviceClick: (AuracastDevice) -> Unit
 ) {
-    val listState = rememberLazyListState() // For controlling scrolling
-    var selectedDeviceAddress by remember { mutableStateOf<String?>(null) } // Track selected device
+    val broadcasters by viewModel.broadcasters.collectAsStateWithLifecycle()
+    val receivers by viewModel.receivers.collectAsStateWithLifecycle()
+    val isScanning by viewModel.isScanning.collectAsStateWithLifecycle()
+    val permissionsGranted by viewModel.permissionsGranted.collectAsStateWithLifecycle()
+    val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
 
-    // Merge broadcasters and receivers for display
+    val listState = rememberLazyListState()
+    var selectedDeviceAddress by remember { mutableStateOf<String?>(null) }
+
+    // Merge broadcasters first, then receivers
     val allDevices = broadcasters + receivers
 
     Scaffold(
@@ -59,9 +54,8 @@ fun AuracastScreen(
                     )
                 },
                 actions = {
-                    // Scan toggle button
                     Button(
-                        onClick = onToggleScan,
+                        onClick = { viewModel.toggleScan() },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isScanning) Color(0xFF0D47A1) else Color(0xFF1976D2),
                             contentColor = Color.White
@@ -82,18 +76,13 @@ fun AuracastScreen(
         },
         containerColor = Color.White
     ) { padding ->
-        // Display merged list of broadcasters and receivers
         AuracastDeviceList(
             devices = allDevices,
             permissionsGranted = permissionsGranted,
             statusMessage = statusMessage,
             onDeviceClick = { device ->
-                selectedDeviceAddress = device.address // Highlight selected device
-
-                // Only navigate/call callback if the device is a broadcaster
-                if (device.broadcastId != null) {
-                    onDeviceClick(device)
-                }
+                selectedDeviceAddress = device.address
+                onDeviceClick(device) // delegate to AppNavHost
             },
             modifier = Modifier
                 .fillMaxSize()

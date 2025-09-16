@@ -130,7 +130,7 @@ class BassGattManager(private val context: Context) {
                     ) {
                         if (characteristic.uuid == BASS_BRS_UUID) {
                             if (status == BluetoothGatt.GATT_SUCCESS) {
-                                @Suppress("DEPRECATION") val value = characteristic.value ?: byteArrayOf()
+                                val value = @Suppress("DEPRECATION") characteristic.value ?: byteArrayOf()
                                 val sources = BassBroadcastStateParser.parse(value) // Parse BRS
                                 cont.resume(sources) {}
                                 logi("BRS read succeeded for ${gatt.device.address}")

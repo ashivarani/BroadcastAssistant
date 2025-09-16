@@ -14,6 +14,7 @@ uiVersion = "1.9.1"
 navigationRuntimeAndroid = "2.9.4"
 uiText = "1.9.1"
 roomKtx = "2.8.0"
+animation = "1.9.1"
 
 [libraries]
 androidx-compose-ui-ui = { module = "androidx.compose.ui:ui", version.ref = "uiVersion" }
@@ -39,6 +40,7 @@ androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version
 androidx-navigation-runtime-android = { group = "androidx.navigation", name = "navigation-runtime-android", version.ref = "navigationRuntimeAndroid" }
 androidx-ui-text = { group = "androidx.compose.ui", name = "ui-text", version.ref = "uiText" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "roomKtx" }
+androidx-animation = { group = "androidx.compose.animation", name = "animation", version.ref = "animation" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

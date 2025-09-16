@@ -18,65 +18,58 @@ import com.android.broadcastassistant.viewmodel.AuracastViewModel
  * Main navigation host for the Auracast app.
  *
  * Responsibilities:
- * - Display list of Auracast devices (broadcasters and receivers) on [AuracastScreen].
- * - Navigate to BIS selection screen ([BisChannelScreen]) for selected broadcasters.
- * - Observe state from [AuracastViewModel] for devices, scanning status, permissions, and status messages.
+ * - Display broadcasters and receivers on [AuracastScreen].
+ * - Navigate to BIS selection screen ([BisChannelScreen]) for broadcasters.
+ * - Fetch selected devices from merged device list.
+ *
+ * @param viewModel [AuracastViewModel] providing device states.
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
 fun AppNavHost(viewModel: AuracastViewModel = viewModel()) {
     val navController = rememberNavController()
 
-    // Collect state from ViewModel
-    val devices by viewModel.devices.collectAsState(initial = emptyList())
-    val isScanning by viewModel.isScanning.collectAsState(initial = false)
-    val permissionsGranted by viewModel.permissionsGranted.collectAsState(initial = false)
-    val statusMessage by viewModel.statusMessage.collectAsState(initial = "")
+    // Collect device flows
+    val broadcasters by viewModel.broadcasters.collectAsState(initial = emptyList())
+    val receivers by viewModel.receivers.collectAsState(initial = emptyList())
 
-    // Split devices into broadcasters (have broadcastId) and receivers (no broadcastId)
-    val broadcasters = devices.filter { it.broadcastId != null }
-    val receivers = devices.filter { it.broadcastId == null }
+    // Merge devices for BIS lookup
+    val allDevices = broadcasters + receivers
 
     NavHost(navController = navController, startDestination = "auracast") {
 
-        // Main Auracast device list screen
+        // Main device list screen
         composable("auracast") {
             AuracastScreen(
-                broadcasters = broadcasters,
-                receivers = receivers,
-                isScanning = isScanning,
-                permissionsGranted = permissionsGranted,
-                statusMessage = statusMessage,
-                onToggleScan = { viewModel.toggleScan() },
+                viewModel = viewModel,
                 onDeviceClick = { device ->
-                    // Navigate to BIS selection screen only for broadcasters
+                    // Navigate only if device is a broadcaster
                     if (device.broadcastId != null) {
+                        logi("Navigating to BIS screen for device ${device.address}")
                         navController.navigate("bis/${device.address}")
                     } else {
-                        // Optional: handle receiver click (e.g., show info toast or log)
-                        logi("Clicked receiver device: ${device.address}")
+                        logi("Receiver clicked (no navigation): ${device.address}")
                     }
                 }
             )
         }
 
-        // BIS Channel Screen for a selected broadcaster device
+        // BIS selection screen
         composable(
             "bis/{deviceAddress}",
             arguments = listOf(navArgument("deviceAddress") { type = NavType.StringType })
         ) { backStackEntry ->
             val address = backStackEntry.arguments?.getString("deviceAddress")
+            val device: AuracastDevice? = allDevices.find { it.address == address }
 
-            // Find device from current ViewModel state
-            val device: AuracastDevice? = devices.find { it.address == address }
-
-            device?.let {
+            if (device != null) {
+                logi("Displaying BIS screen for ${device.name} (${device.address})")
                 BisChannelScreen(
-                    device = it,
-                    onBack = { navController.popBackStack() } // Navigate back to AuracastScreen
+                    device = device,
+                    onBack = { navController.popBackStack() }
                 )
-            } ?: run {
-                loge("AppNavHost: Device not found for address=$address")
+            } else {
+                loge("BIS screen: Device not found for address=$address")
             }
         }
     }

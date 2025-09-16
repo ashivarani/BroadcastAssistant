@@ -31,7 +31,7 @@ android {
          */
         val versionMajor = 3
         val versionMinor = 0
-        val versionPatch = 0
+        val versionPatch = 1
 
         versionCode = (versionMajor * 10000) + (versionMinor * 100) + versionPatch
         versionName = "$versionMajor.$versionMinor.$versionPatch"
@@ -110,6 +110,7 @@ dependencies {
     implementation(libs.androidx.navigation.runtime.android)
     implementation(libs.androidx.ui.text)
     implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.animation)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

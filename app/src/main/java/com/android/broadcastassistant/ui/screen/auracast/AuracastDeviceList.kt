@@ -14,13 +14,12 @@ import com.android.broadcastassistant.data.AuracastDevice
 import com.android.broadcastassistant.ui.theme.AppTextPrimary
 
 /**
- * Displays a scrollable list of Auracast devices (broadcasters and receivers).
+ * Displays a scrollable list of Auracast devices (broadcasters + connected receivers).
  *
  * Features:
  * - Shows status messages above the list.
- * - Handles permission warnings if Bluetooth scan/connect permissions are missing.
+ * - Handles permission warnings if Bluetooth permissions are missing.
  * - Highlights the currently selected device.
- * - Only allows clicks on broadcasters (devices with broadcastId).
  *
  * @param devices List of [AuracastDevice]s to display.
  * @param permissionsGranted Whether required Bluetooth permissions are granted.
@@ -45,7 +44,7 @@ fun AuracastDeviceList(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Show status message if available
+        // Status message (optional)
         if (statusMessage.isNotBlank()) {
             Text(
                 text = statusMessage,
@@ -54,7 +53,7 @@ fun AuracastDeviceList(
             )
         }
 
-        // Show permission warning and prevent further UI if not granted
+        // Permission check
         if (!permissionsGranted) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -65,21 +64,26 @@ fun AuracastDeviceList(
                     color = Color.Red
                 )
             }
-            return@Column // Stop further rendering if permissions missing
+            return@Column
         }
 
-        // Show device list if available
-        if (devices.isNotEmpty()) {
-            LazyColumn(state = listState) {
-                items(devices) { device ->
+        // Split: broadcasters first, then receivers
+        val broadcasters = devices.filter { it.broadcastId != null }
+        val receivers = devices.filter { it.broadcastId == null }
+        val sortedDevices = broadcasters + receivers
+
+        if (sortedDevices.isNotEmpty()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState
+            ) {
+                items(sortedDevices) { device ->
                     val isSelected = device.address == selectedDeviceAddress
 
-                    // AuracastDeviceCard handles broadcaster/receiver styling
                     AuracastDeviceCard(
                         device = device,
                         isSelected = isSelected,
                         onClick = {
-                            // Only allow clicks for broadcasters
                             if (device.broadcastId != null) {
                                 onDeviceClick(device)
                             }
@@ -88,13 +92,13 @@ fun AuracastDeviceList(
                 }
             }
         } else {
-            // Show fallback text if no devices found
+            // Fallback text when no devices found
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No devices found",
+                    text = "No broadcasters or connected receivers found",
                     color = AppTextPrimary
                 )
             }

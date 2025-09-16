@@ -1,56 +1,54 @@
 package com.android.broadcastassistant.ui.screen.auracast
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.lazy.rememberLazyListState
 import com.android.broadcastassistant.audio.PreviewAuracastDevice
 import com.android.broadcastassistant.data.AuracastDevice
 
 /**
- * Preview for [AuracastScreen] using fake Auracast devices.
+ * Preview for AuracastScreen using dummy data.
  *
- * Demonstrates:
- * - Scan active state
- * - Permissions granted
- * - Status message display
- * - Selected BIS highlighting for alternate devices
- * - Broadcasters vs Receivers differentiation
+ * - Uses static lists for broadcasters and receivers.
+ * - No real ViewModel or BLE scanning is required.
+ * - Shows selected BIS and device highlighting in preview.
  */
-@Composable
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Preview(showBackground = true, apiLevel = 34)
+@Composable
 fun AuracastScreenPreview() {
-    // Generate dummy broadcasters
-    val broadcasterDevices: List<AuracastDevice> = PreviewAuracastDevice.fakeBroadcasters().mapIndexed { index, device ->
-        device.copy(
-            selectedBisIndexes = if (index % 2 == 0) listOf(1, 2) else emptyList()
-        )
-    }
+    // Fake broadcasters
+    val broadcasters = PreviewAuracastDevice.fakeBroadcasters()
 
-    // Generate dummy receivers manually (broadcastId = null)
-    val receiverDevices: List<AuracastDevice> = List(3) { index ->
+    // Static receiver list
+    val receivers = listOf(
         AuracastDevice(
-            name = "Receiver $index",
-            address = "00:11:22:33:44:${index}5",
-            rssi = -50 + index,
-            broadcastId = null, // null = receiver
-            selectedBisIndexes = if (index % 2 != 0) listOf(1) else emptyList()
+            name = "Receiver 1",
+            address = "00:11:22:33:44:01",
+            rssi = -60,
+            broadcastId = null,
+            selectedBisIndexes = listOf(0) // example BIS selected
+        ),
+        AuracastDevice(
+            name = "Receiver 2",
+            address = "00:11:22:33:44:02",
+            rssi = -55,
+            broadcastId = null,
+            selectedBisIndexes = emptyList()
         )
-    }
+    )
 
-    // Display AuracastScreen with separate broadcasters and receivers
-    AuracastScreen(
-        broadcasters = broadcasterDevices,
-        receivers = receiverDevices,
-        isScanning = true,
+    // Display merged devices in preview
+    AuracastDeviceList(
+        devices = broadcasters + receivers,
         permissionsGranted = true,
-        statusMessage = "Scanning – ${broadcasterDevices.size + receiverDevices.size} devices found",
-        onToggleScan = {},
-        onDeviceClick = { device ->
-            // Only simulate navigation for broadcasters in preview
-            if (device.broadcastId != null) {
-                println("Broadcaster clicked: ${device.name} – navigate to BIS selection")
-            } else {
-                println("Receiver clicked: ${device.name} – no BIS selection")
-            }
-        }
+        statusMessage = "Preview: ${broadcasters.size + receivers.size} devices found",
+        onDeviceClick = { /* No-op for preview */ },
+        modifier = Modifier,
+        listState = rememberLazyListState(),
+        selectedDeviceAddress = null
     )
 }
