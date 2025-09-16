@@ -175,7 +175,7 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
                 // Pick first available Scan Delegator
                 val delegator = scanDelegatorManager.discoveredDelegators.value?.firstOrNull()
                 if (delegator == null) {
-                    _statusMessage.value = "No Scan Delegator available"
+                    _statusMessage.value = getApplication<Application>().getString(R.string.no_scan_delegator)
                     _statusColor.value = Color.Red
                     logw("No Scan Delegator found for BIS selection")
                     return@launch
@@ -185,7 +185,7 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
                 val sources = bassGattManager.readBroadcastReceiveState(delegator.address)
                 val match = sources.find { it.broadcastId == device.broadcastId }
                 if (match == null) {
-                    _statusMessage.value = "No matching broadcast on delegator"
+                    _statusMessage.value = getApplication<Application>().getString(R.string.no_matching_broadcast)
                     _statusColor.value = Color.Red
                     logw("No matching broadcast for device ${device.address} on delegator ${delegator.address}")
                     return@launch
@@ -217,14 +217,14 @@ class AuracastViewModel(application: Application) : AndroidViewModel(application
                         }
                     }
                     is BisSelectionResult.Failure -> {
-                        _statusMessage.value = "BIS switch failed: ${result.reason}"
+                        _statusMessage.value = getApplication<Application>().getString(R.string.bis_switch_failed)
                         _statusColor.value = Color.Red
                         logw("BIS selection failed for ${device.address}: ${result.reason}")
                     }
                 }
 
             } catch (e: Exception) {
-                _statusMessage.value = "BIS switch failed: ${e.message}"
+                _statusMessage.value = getApplication<Application>().getString(R.string.bis_switch_failed)
                 _statusColor.value = Color.Red
                 loge("Exception during BIS selection for ${device.address}", e)
             }
