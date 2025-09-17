@@ -32,23 +32,28 @@ fun AuracastDeviceCard(
     isSelected: Boolean = false,
     onClick: () -> Unit
 ) {
-    // Determine card background color based on selection and device type
+    // Determine card background color
     val containerColor = when {
-        isSelected -> Color(0xFF1976D2)                 // Highlight selected device
-        device.broadcastId == null -> Color(0xFF43A047) // Receiver (green)
-        else -> Color(0xFF1A73E8)                       // Broadcaster (blue)
+        isSelected -> Color(0xFF1976D2)                 // Selected
+        device.broadcastId == null -> Color(0xFF43A047) // Receiver
+        else -> Color(0xFF1A73E8)                       // Broadcaster
     }
+
+    // Disable click for receivers
+    val clickableModifier = if (device.broadcastId != null) {
+        Modifier.clickable { onClick() }
+    } else Modifier
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .clickable { onClick() }, // Handle click events
+            .then(clickableModifier),
         colors = CardDefaults.cardColors(containerColor = containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Device name and address (bold)
+            // Name and address
             Text(
                 text = "${device.name} (${device.address})",
                 fontWeight = FontWeight.Bold,
@@ -56,14 +61,14 @@ fun AuracastDeviceCard(
                 color = Color.White
             )
 
-            // RSSI display
+            // RSSI (show unknown if 0 or not fetched)
             Text(
-                text = "RSSI: ${device.rssi} dBm",
+                text = "RSSI: ${if (device.rssi != 0) "${device.rssi} dBm" else "unknown"}",
                 fontSize = 14.sp,
                 color = Color.White
             )
 
-            // Show broadcast ID for broadcasters
+            // Broadcast ID
             device.broadcastId?.let { broadcastId ->
                 Text(
                     text = "Broadcast ID: $broadcastId",
@@ -72,7 +77,7 @@ fun AuracastDeviceCard(
                 )
             }
 
-            // Label receivers
+            // Label for receivers
             if (device.broadcastId == null) {
                 Text(
                     text = "Receiver",
@@ -83,12 +88,12 @@ fun AuracastDeviceCard(
                 )
             }
 
-            // Overlay displaying selected BIS channels
+            // Selected BIS overlay
             if (device.selectedBisIndexes.isNotEmpty()) {
                 Row(
                     modifier = Modifier
                         .padding(top = 6.dp)
-                        .background(Color(0x33000000)) // Semi-transparent overlay
+                        .background(Color(0x33000000))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text("Selected BIS: ", color = Color.Yellow, fontSize = 12.sp)
